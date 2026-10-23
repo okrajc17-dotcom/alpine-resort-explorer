@@ -1,0 +1,1385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Concept: explore Alpine ski resorts on a map and turn Val Thorens in 3D, with runs, lifts, meeting points and an analytics event plan.">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Alpine Resort Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: trail-map explorer. Map stage left (Alps overview or one resort's piste map), resort card right, analytics log below. */
+:root{
+  --bg:#F2F5F8; --surface:#FFFFFF; --land:#E2E8EE; --sea:#C9D9E6; --snow:#F9FBFD; --village:#E4E1DA;
+  --ink:#14243A; --muted:#55657A; --line:#C6D1DC; --soft:#ECEFF8;
+  --accent:#5A3CC8; --accent-ink:#FFFFFF; --pin:#14243A; --pin-ring:#FFFFFF;
+  --green:#2E9E5B; --blue:#2563C9; --red:#D3302B; --black:#1B1F24;
+  --sky:#DCE7F1; --scene-ink:#14243A; --scene-halo:#FFFFFF; --scene-accent:#5A3CC8;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1520; --surface:#131D2A; --land:#1B2636; --sea:#0A1119; --snow:#101A26; --village:#2A2F38;
+  --ink:#E6EDF5; --muted:#9AA9BC; --line:#2B3848; --soft:#1C2140;
+  --accent:#A792FF; --accent-ink:#140C33; --pin:#E6EDF5; --pin-ring:#0D1520;
+  --green:#3DBE74; --blue:#6B9BF2; --red:#FF6A5E; --black:#E6EDF5; --sky:#0B1420; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1520; --surface:#131D2A; --land:#1B2636; --sea:#0A1119; --snow:#101A26; --village:#2A2F38;
+  --ink:#E6EDF5; --muted:#9AA9BC; --line:#2B3848; --soft:#1C2140;
+  --accent:#A792FF; --accent-ink:#140C33; --pin:#E6EDF5; --pin-ring:#0D1520;
+  --green:#3DBE74; --blue:#6B9BF2; --red:#FF6A5E; --black:#E6EDF5; --sky:#0B1420; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:1240px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+a{color:inherit}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{padding-block:28px 14px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(38px,6.4vw,66px);line-height:.92;text-transform:uppercase;letter-spacing:.01em;margin:0 0 12px;text-wrap:balance}
+.lede{margin:0;max-width:62ch;color:var(--muted);font-size:17px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start;padding-block:10px 28px}
+@media (max-width:920px){.layout{grid-template-columns:minmax(0,1fr)}}
+.mapcol{min-width:0;display:flex;flex-direction:column;gap:12px}
+.layout[data-mode="alps"] .only-piste{display:none!important}
+.layout[data-mode="piste"] .only-alps{display:none!important}
+
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chipbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 13px;font-size:14px;font-weight:500;cursor:pointer}
+.chipbtn:hover{border-color:var(--ink)}
+.chipbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.backbtn{border:1px solid var(--ink);background:var(--surface);border-radius:999px;padding:6px 13px;font-size:14px;font-weight:600;cursor:pointer}
+.crumb{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.bar .spacer{flex:1}
+
+.mapbox{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sea)}
+.stage{display:block;width:100%;aspect-ratio:1000/574;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.stage.dragging{cursor:grabbing}
+#pmap{background:var(--snow)}
+@media (max-width:640px){.stage{aspect-ratio:4/3}}
+
+.sea{fill:var(--sea)}
+.land{fill:var(--land)}
+.border{fill:none;stroke:var(--muted);stroke-dasharray:5 4;opacity:.55}
+.clabel{fill:var(--muted);font-family:var(--f-display);font-weight:600;opacity:.6;pointer-events:none}
+.area{fill:var(--accent);fill-opacity:.06;stroke:var(--accent);stroke-opacity:.55;stroke-dasharray:6 4;stroke-linejoin:round}
+.alabel{fill:var(--accent);font-family:var(--f-display);font-weight:700;letter-spacing:.06em;text-transform:uppercase;pointer-events:none}
+.ap-mark{fill:var(--surface);stroke:var(--ink)}
+.ap-code{fill:var(--muted);font-family:var(--f-mono);font-weight:500;pointer-events:none}
+.pin{cursor:pointer;outline:none}
+.pin-dot{fill:var(--pin);stroke:var(--pin-ring)}
+.pin:hover .pin-dot,.pin.sel .pin-dot{fill:var(--accent)}
+.pin-ring{fill:none;stroke:var(--accent);display:none}
+.pin.sel .pin-ring,.pin:focus-visible .pin-ring{display:block}
+.pin-badge{fill:var(--accent);display:none}
+.pin.has-map .pin-badge{display:block}
+.pin-label{fill:var(--ink);font-family:var(--f-body);font-weight:600;paint-order:stroke;stroke:var(--land);stroke-linejoin:round;pointer-events:none}
+
+.snowbg{fill:var(--snow)}
+.village{fill:var(--village);stroke:var(--line)}
+.vlabel{fill:var(--ink);font-family:var(--f-display);font-weight:700;letter-spacing:.05em;paint-order:stroke;stroke:var(--snow);stroke-linejoin:round;pointer-events:none}
+.vdot{fill:var(--muted)}
+.vlabel2{fill:var(--muted);font-family:var(--f-display);font-weight:600;letter-spacing:.05em;paint-order:stroke;stroke:var(--snow);stroke-linejoin:round;pointer-events:none}
+.run-case{fill:none;stroke:var(--snow);stroke-width:6px;stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke;cursor:help}
+.run{fill:none;stroke-width:2.4px;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;transition:opacity .2s}
+.run.n{stroke:var(--green)}.run.e{stroke:var(--blue)}.run.i{stroke:var(--red)}.run.a{stroke:var(--black)}
+.run.f{stroke:var(--black);stroke-dasharray:5 4}.run.u{stroke:var(--muted)}
+.run.hl{stroke-width:5px}
+#pmap[data-filter="beginner"] .run.i,#pmap[data-filter="beginner"] .run.a,#pmap[data-filter="beginner"] .run.f{opacity:.12}
+#pmap[data-filter="advanced"] .run.n,#pmap[data-filter="advanced"] .run.e,#pmap[data-filter="advanced"] .run.u{opacity:.12}
+.lift{fill:none;stroke:var(--ink);stroke-width:1.5px;pointer-events:none}
+.lift-end{fill:var(--ink);pointer-events:none}
+.lift-hit{fill:none;stroke:transparent;stroke-width:10px;pointer-events:stroke;cursor:help}
+.lift-label{fill:var(--ink);font-family:var(--f-mono);font-weight:500;paint-order:stroke;stroke:var(--snow);stroke-linejoin:round;pointer-events:none}
+.peak{fill:var(--muted)}
+.plabel{fill:var(--muted);font-family:var(--f-body);font-weight:500;paint-order:stroke;stroke:var(--snow);stroke-linejoin:round;pointer-events:none}
+.mp{cursor:pointer;outline:none}
+.mp .mpc{fill:var(--accent);stroke:var(--snow)}
+.mp.sel .mpc,.mp:focus-visible .mpc{stroke:var(--ink)}
+.mp .mpn{fill:var(--accent-ink);font-family:var(--f-mono);font-weight:500;text-anchor:middle;pointer-events:none}
+.mp .mpl{fill:var(--accent);font-family:var(--f-body);font-weight:600;paint-order:stroke;stroke:var(--snow);stroke-linejoin:round;pointer-events:none}
+
+.layout[data-view="2d"] #p3d{display:none!important}
+.layout[data-view="3d"] #pmap{display:none!important}
+#p3d{position:relative;width:100%;aspect-ratio:1000/574;background:var(--sky);touch-action:none;overflow:hidden}
+@media (max-width:640px){#p3d{aspect-ratio:4/3}}
+#p3d canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+#p3d canvas:active{cursor:grabbing}
+.l3d{position:absolute;left:0;top:0;white-space:nowrap;pointer-events:none;will-change:transform}
+.l3d.pk{font-size:12px;font-weight:600;color:var(--scene-ink);text-shadow:0 0 3px var(--scene-halo),0 0 3px var(--scene-halo),0 0 2px var(--scene-halo);transform-origin:0 100%}
+.l3d.pk small{font-family:var(--f-mono);font-weight:500;font-size:11px}
+.l3d.vil{font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--scene-ink);text-shadow:0 0 4px var(--scene-halo),0 0 4px var(--scene-halo),0 0 2px var(--scene-halo)}
+.l3d.mpb{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;border:2px solid var(--scene-halo);background:var(--scene-accent);color:#FFFFFF;border-radius:999px;padding:3px 10px 3px 4px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(20,36,58,.35)}
+.l3d.mpb i{font-style:normal;font-family:var(--f-mono);width:20px;height:20px;border-radius:50%;background:#FFFFFF;color:var(--scene-accent);display:grid;place-items:center;font-size:11px}
+.l3d.mpb[aria-current="true"]{border-color:var(--scene-ink);z-index:1}
+.l3d.mpb.compact{padding:3px}
+.l3d.mpb.compact span{display:none}
+.nogl{position:absolute;inset:auto 10px 10px 10px;margin:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+.loading3d{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ctrls{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.ctrls button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:18px;font-weight:600;cursor:pointer;line-height:1}
+.ctrls button:hover{border-color:var(--ink)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;padding:6px 9px;border-radius:6px;white-space:nowrap;transform:translate(-50%,calc(-100% - 12px));z-index:2}
+.tip b{font-weight:600}
+.hint{position:absolute;left:10px;bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--muted)}
+
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.lg-dot{width:12px;height:12px;border-radius:50%;background:var(--pin);display:inline-block}
+.lg-dot.s{width:7px;height:7px}
+.lg-ap{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid var(--ink);background:var(--surface);display:inline-block}
+.lg-area{width:22px;height:12px;border:1.5px dashed var(--accent);border-radius:6px;display:inline-block}
+.lg-run{width:22px;height:0;border-top:3px solid;display:inline-block}
+.lg-run.n{border-color:var(--green)}.lg-run.e{border-color:var(--blue)}.lg-run.i{border-color:var(--red)}.lg-run.a{border-color:var(--black)}
+.lg-run.f{border-top:3px dashed var(--black)}
+.lg-lift{width:22px;height:0;border-top:1.5px solid var(--ink);display:inline-block;position:relative}
+.lg-mp{width:12px;height:12px;border-radius:50%;background:var(--accent);display:inline-block}
+.attrib{font-size:12px;color:var(--muted)}
+
+.inview h2{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;margin:4px 0 8px}
+.rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px;margin:0;padding:0;list-style:none}
+.rlist button{width:100%;display:flex;justify-content:space-between;gap:8px;align-items:baseline;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;cursor:pointer;text-align:left;font-size:14px}
+.rlist button:hover{border-color:var(--ink)}
+.rlist button[aria-current="true"]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.rlist .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.more{font-size:13px;color:var(--muted);margin:6px 0 0}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:920px){.panel{position:static}}
+.p-head{padding:18px 18px 16px;display:flex;flex-direction:column;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted)}
+.chip-area{border-color:var(--accent);color:var(--accent)}
+.p-name{font-family:var(--f-display);font-weight:700;font-size:36px;line-height:1;text-transform:uppercase;margin:0;text-wrap:balance}
+.facts{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0}
+.facts div{display:flex;gap:6px;align-items:baseline}
+.facts dt{font-family:var(--f-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.facts dd{margin:0;font-weight:500}
+.count{display:flex;align-items:baseline;gap:10px}
+.count .num{font-family:var(--f-display);font-weight:700;font-size:52px;line-height:.9;font-variant-numeric:tabular-nums}
+.count .cl{color:var(--muted);font-size:14px;line-height:1.25}
+.villages{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.villages li{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.villages .vn{font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.note{margin:0;font-size:14px;background:var(--soft);border-radius:6px;padding:8px 10px}
+.p-sec{border-top:1px solid var(--line);padding:14px 18px}
+.p-sec h3,.p-sec summary{font-family:var(--f-display);font-weight:600;font-size:21px;text-transform:uppercase;letter-spacing:.02em;margin:0}
+.p-sec summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.p-sec summary::-webkit-details-marker{display:none}
+.p-sec summary::after{content:"+";font-family:var(--f-mono);font-size:18px;color:var(--muted)}
+.p-sec[open] summary::after{content:"−"}
+.p-body{display:flex;flex-direction:column;gap:10px;margin-top:10px;font-size:15px}
+.p-body p{margin:0}
+.offmap{display:flex;flex-direction:column;gap:1px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:8px 11px;background:var(--bg)}
+.offmap:hover{border-color:var(--ink)}
+.offmap .om-t{font-weight:600}
+.offmap .om-s{font-size:13px;color:var(--muted)}
+.mapcta{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding:14px 18px;background:var(--soft)}
+.mapcta p{margin:0;font-size:14px;color:var(--muted)}
+form.sf{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.sf label{display:flex;flex-direction:column;gap:4px;font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0}
+.sf select,.sf input{font-family:var(--f-body);font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 9px;min-width:0;width:100%}
+.full{grid-column:1/-1}
+.err{margin:0;color:var(--red);font-size:14px}
+.cta{display:block;text-align:center;text-decoration:none;background:var(--accent);color:var(--accent-ink);font-weight:600;border-radius:8px;padding:12px 14px;border:0;cursor:pointer;width:100%}
+.cta:hover{filter:brightness(1.06)}
+.aps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.aps li{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.aps strong{display:block;font-weight:600}
+.aps span{font-size:13px;color:var(--muted)}
+.lnk{font-weight:600;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.linkbtn{background:none;border:0;padding:0;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:left;color:var(--ink)}
+.ghost{border:1px solid var(--ink);background:transparent;border-radius:8px;padding:9px 12px;font-weight:600;cursor:pointer;text-align:left}
+.tnote{font-size:14px;color:var(--muted)}
+.badge{align-self:flex-start;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:var(--soft);border-radius:4px;padding:2px 7px;color:var(--muted)}
+.mplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mplist button{width:100%;display:grid;grid-template-columns:26px minmax(0,1fr);gap:2px 10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;cursor:pointer}
+.mplist button:hover{border-color:var(--ink)}
+.mplist button[aria-current="true"]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.mplist .k{grid-row:span 2;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-family:var(--f-mono);font-size:12px;display:grid;place-items:center}
+.mplist .t{font-weight:600}
+.mplist .s{font-size:13px;color:var(--muted)}
+.mpdetail{border:1px solid var(--accent);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.mpdetail .q{font-style:italic}
+.mpdetail dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;margin:0}
+.mpdetail dt{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.mpdetail dd{margin:0}
+.meet{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line)}
+.m-sky{fill:var(--soft)}
+.m-mtn{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.m-red,.m-blue,.m-green{fill:none;stroke-width:3;stroke-linecap:round}
+.m-red{stroke:var(--red)}.m-blue{stroke:var(--blue)}.m-green{stroke:var(--green)}
+.m-lift{stroke:var(--ink);stroke-width:1.2;stroke-dasharray:2 3}
+.m-st{fill:var(--ink)}
+.m-vil{fill:var(--muted)}
+.m-pin{fill:var(--accent);stroke:var(--surface);stroke-width:2}
+.m-t{fill:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600}
+.m-t2{fill:var(--accent);font-family:var(--f-body);font-size:11px;font-weight:600}
+
+.track{padding-block:8px 28px}
+.track-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:14px}
+.track-head h2{font-family:var(--f-display);font-weight:700;font-size:34px;text-transform:uppercase;margin:0;line-height:1}
+.track-head p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.funnel{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
+.fstep{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;min-width:104px}
+.fstep .fv{font-family:var(--f-display);font-weight:700;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.fstep .fl{font-size:12.5px;color:var(--muted)}
+.farrow{align-self:center;color:var(--muted);font-family:var(--f-mono)}
+.tgrid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px}
+@media (max-width:920px){.tgrid{grid-template-columns:minmax(0,1fr)}}
+.tgrid h3{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;margin:0 0 8px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td code{font-family:var(--f-mono);font-size:12.5px}
+.logbox{border:1px solid var(--line);border-radius:8px;background:var(--surface);display:flex;flex-direction:column}
+.logbar{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.logbar button{border:1px solid var(--line);background:transparent;border-radius:6px;padding:3px 9px;font-size:13px;cursor:pointer}
+.log{list-style:none;margin:0;padding:0;max-height:360px;overflow:auto}
+.log li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.log .t{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.log .ev{font-family:var(--f-mono);font-weight:500;font-size:13px;color:var(--accent)}
+.log .pr{grid-column:2;font-family:var(--f-mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.log li.new{background:var(--soft)}
+@media (prefers-reduced-motion:no-preference){.log li.new{animation:fade 1.6s ease-out forwards}@keyframes fade{to{background:transparent}}}
+.foot{padding-block:0 32px;font-size:13px;color:var(--muted)}
+.foot p{margin:0 0 6px;max-width:90ch}
+</style>
+</head>
+<body>
+
+
+<header class="top wrap">
+  <p class="eyebrow">Concept for an "Explore resorts" page in Maison Sport's booking flow · not an official page</p>
+  <h1>Explore ski resorts</h1>
+  <p class="lede">Pick a region, tap a resort and see who teaches there and how to get there. Open Val Thorens to turn its real mountain in 3D, with runs, lifts and example meeting points. Every tap is logged below as the analytics event it would send.</p>
+</header>
+
+<main class="wrap layout" id="layout" data-mode="alps" data-view="3d">
+  <section class="mapcol" aria-label="Resort map">
+    <div class="bar only-alps" role="toolbar" aria-label="Jump to region" id="regions"></div>
+    <div class="bar only-piste">
+      <button type="button" class="backbtn" id="back">← All Alps</button>
+      <span class="crumb">Tarentaise › Les 3 Vallées › Val Thorens</span>
+      <span class="spacer"></span>
+      <div class="bar" role="group" aria-label="Map view" id="viewbar">
+        <button type="button" class="chipbtn" id="v3d" aria-pressed="true">3D mountain</button>
+        <button type="button" class="chipbtn" id="v2d" aria-pressed="false">2D map</button>
+      </div>
+    </div>
+    <div class="bar only-piste" role="toolbar" aria-label="Filter runs" id="filters"></div>
+    <div class="mapbox" id="mapbox">
+      <svg id="map" class="stage only-alps" viewBox="0 0 1000 574" role="group" aria-label="Map of the Alps with ski resorts">
+        <g id="g-sea"></g><g id="g-land"></g><g id="g-areas"></g><g id="g-clabels"></g><g id="g-aps"></g><g id="g-pins"></g>
+      </svg>
+      <svg id="pmap" class="stage only-piste" viewBox="0 0 1000 574" role="group" aria-label="Piste map of Val Thorens with lifts and meeting points" data-filter="all">
+        <g id="p-bg"></g><g id="p-case"></g><g id="p-runs"></g><g id="p-lifts"></g><g id="p-peaks"></g><g id="p-labels"></g><g id="p-mps"></g>
+      </svg>
+      <div id="p3d" class="only-piste" role="group" aria-label="3D model of the Val Thorens ski area with runs, lifts and meeting points">
+        <p class="loading3d" id="loading3d">Building the mountain…</p>
+        <div id="l3d"></div>
+        <p class="nogl" id="nogl" hidden>This browser can't show 3D, so you're seeing the 2D map.</p>
+      </div>
+      <div class="ctrls">
+        <button type="button" id="z-in" aria-label="Zoom in">+</button>
+        <button type="button" id="z-out" aria-label="Zoom out">−</button>
+      </div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="hint" id="hint" hidden>Hold Ctrl or ⌘ and scroll to zoom</div>
+    </div>
+    <div class="legend only-alps">
+      <span><i class="lg-dot s"></i><i class="lg-dot"></i>Pin size = active instructors</span>
+      <span><i class="lg-area"></i>Lift-linked ski area</span>
+      <span><i class="lg-ap"></i>Airport</span>
+      <span>Drag to pan</span>
+    </div>
+    <div class="legend only-piste">
+      <span><i class="lg-run n"></i>Green</span>
+      <span><i class="lg-run e"></i>Blue</span>
+      <span><i class="lg-run i"></i>Red</span>
+      <span><i class="lg-run a"></i>Black</span>
+      <span><i class="lg-run f"></i>Itinerary</span>
+      <span><i class="lg-lift"></i>Lift</span>
+      <span><i class="lg-mp"></i>Example meeting point</span>
+    </div>
+    <p class="attrib only-piste" id="attrib">Drag to turn the mountain, right-drag or two fingers to move, Ctrl/⌘ + scroll or pinch to zoom. Hover or tap a run or lift for its name. Runs, lifts and peaks © OpenStreetMap contributors (ODbL); terrain from AWS Terrain Tiles (Mapzen, SRTM and other public elevation data), retrieved 23 Oct 2026.</p>
+    <div class="inview only-alps">
+      <h2 id="iv-title">Resorts in this view</h2>
+      <ul class="rlist" id="rlist"></ul>
+      <p class="more" id="more" hidden></p>
+    </div>
+  </section>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</main>
+
+<section class="wrap track" aria-labelledby="tr-h">
+  <div class="track-head">
+    <div>
+      <h2 id="tr-h">What we'd track</h2>
+      <p>Each interaction pushes an event to <code>window.dataLayer</code>. Google Tag Manager forwards it to GA4, where the steps below become a funnel.</p>
+    </div>
+    <div class="funnel" aria-label="This session's funnel">
+      <div class="fstep"><div class="fv" id="c-view">0</div><div class="fl">Explorer views</div></div>
+      <span class="farrow">→</span>
+      <div class="fstep"><div class="fv" id="c-res">0</div><div class="fl">Resorts opened</div></div>
+      <span class="farrow">→</span>
+      <div class="fstep"><div class="fv" id="c-mp">0</div><div class="fl">Meeting points seen</div></div>
+      <span class="farrow">→</span>
+      <div class="fstep"><div class="fv" id="c-search">0</div><div class="fl">Instructor searches</div></div>
+    </div>
+  </div>
+  <div class="tgrid">
+    <div>
+      <h3>Event plan</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Event</th><th>Fires when</th><th>Parameters</th></tr></thead>
+          <tbody>
+            <tr><td><code>explore_map_view</code></td><td>The explorer loads</td><td>page_variant</td></tr>
+            <tr><td><code>map_zoom</code></td><td>A region button, zoom button, pinch or Ctrl-scroll changes the view</td><td>map, method, region, zoom</td></tr>
+            <tr><td><code>resort_select</code></td><td>A resort opens from a pin or the list</td><td>resort, source, instructors</td></tr>
+            <tr><td><code>piste_map_view</code></td><td>A resort's piste map opens</td><td>resort, source, view</td></tr>
+            <tr><td><code>map_view_toggle</code></td><td>Someone switches between the 3D mountain and the 2D map</td><td>resort, view</td></tr>
+            <tr><td><code>map_3d_orbit</code></td><td>Someone turns or zooms the 3D mountain (once per gesture)</td><td>resort, distance_km</td></tr>
+            <tr><td><code>piste_filter</code></td><td>A run filter is picked on the piste map</td><td>resort, filter</td></tr>
+            <tr><td><code>meeting_point_select</code></td><td>A meeting point is tapped on the map or in the list</td><td>resort, point, source</td></tr>
+            <tr><td><code>panel_section_open</code></td><td>Getting there or Meeting point is expanded</td><td>resort, section</td></tr>
+            <tr><td><code>official_map_click</code></td><td>The official piste map link opens (bergfex, or a web search where bergfex has none)</td><td>resort, provider, from</td></tr>
+            <tr><td><code>directions_click</code></td><td>A Google Maps link opens</td><td>resort, target</td></tr>
+            <tr><td><code>transfer_cta_click</code></td><td>The transfer quote button is tapped</td><td>resort, airport</td></tr>
+            <tr><td><code>instructor_search</code></td><td>The search button sends you to the instructor list</td><td>resort, sport, participants, lesson_days, lead_days</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>Live event log</h3>
+      <div class="logbox">
+        <div class="logbar"><span id="log-n">0 events</span><button type="button" id="log-clear">Clear</button></div>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap foot">
+  <p>Instructor counts are a snapshot of maisonsport.com's public resort list on 22 Oct 2026 (241 resorts with active instructors; this map shows 46 of the busiest in France, Switzerland and Italy). Villages in the same resort are listed separately because one instructor can teach in several.</p>
+  <p>The Val Thorens 3D mountain uses a 150 m elevation grid from AWS Terrain Tiles, smoothed and raised 15% so the relief reads on a small screen. Runs and lifts are drawn from OpenStreetMap data (© OpenStreetMap contributors, ODbL), simplified to about 25 m. Lift names and positions are real; the three meeting points are examples placed at real lift stations, because in the real product each instructor sets their own. Altitudes, train stations and straight-line airport distances are indicative. Search buttons open the real Maison Sport results page in a new tab.</p>
+  <p>Concept by Oskar Krajc. Not affiliated with or endorsed by Maison Sport.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const MAPDATA = {"W":1000,"H":574,"k":7345.612758087479,"tx":-628.2051282051284,"ty":6975.911931037509,"countries":[{"code":"CH","d":"M592.8,33.5L596.4,35.8L605.7,44.4L603.8,58.5L593.2,81.5L587.7,99.9L587.2,114.3L588.1,120.8L590.0,120.8L600.1,121.8L605.2,121.8L620.9,125.4L633.8,130.9L636.6,137.1L638.0,144.3L653.2,154.1L670.8,160.3L676.8,158.3L698.5,135.2L707.2,139.1L712.3,151.5L711.8,157.7L705.8,182.0L704.9,195.3L710.0,203.8L710.5,210.6L709.1,216.7L700.3,217.4L688.8,213.8L679.1,203.5L671.2,204.7L664.8,207.3L661.5,217.4L658.8,229.0L659.7,235.8L664.3,240.6L668.0,251.6L670.3,265.5L672.6,271.9L670.3,274.5L664.3,276.4L659.2,274.8L650.0,258.1L645.8,251.6L638.9,250.7L626.5,254.5L607.5,263.9L599.7,263.9L593.2,261.9L587.2,254.2L582.1,239.0L580.3,229.3L576.6,229.7L564.6,226.8L559.1,230.6L559.1,246.1L557.7,265.8L551.7,278.0L534.6,299.9L528.6,309.2L525.8,315.9L525.4,321.7L528.1,331.9L531.4,341.5L528.6,347.3L519.8,350.2L513.4,344.1L511.1,333.9L497.2,319.4L503.2,307.6L502.3,304.4L479.7,298.3L470.0,289.3L456.1,273.2L453.4,266.4L454.3,244.2L453.4,238.7L451.5,236.1L445.1,236.1L435.8,243.9L427.1,255.5L409.5,268.7L407.7,271.3L413.7,284.1L413.2,289.0L399.4,309.2L396.6,315.9L378.6,328.4L370.3,333.2L345.4,323.9L338.4,322.6L326.9,329.1L311.2,334.8L285.8,340.9L276.1,336.4L272.0,332.3L269.7,326.2L263.2,315.6L255.8,309.2L250.8,302.1L244.3,294.4L240.1,288.3L245.7,267.7L241.5,260.6L239.2,250.3L240.6,243.2L238.3,241.6L215.2,237.7L195.8,239.0L182.4,245.8L170.9,257.1L169.5,259.7L170.4,261.6L176.0,271.9L166.8,283.2L152.0,291.5L141.8,292.5L137.2,290.9L137.2,279.0L145.5,274.8L153.4,267.1L155.7,256.1L156.6,248.7L148.8,239.4L149.7,233.9L154.8,222.9L157.5,213.5L161.7,205.4L177.4,191.8L193.5,178.5L195.8,163.8L197.2,146.3L199.5,142.0L221.2,131.6L226.3,127.3L229.1,121.5L246.1,101.8L263.2,82.2L266.4,75.6L269.2,71.7L269.2,68.4L267.4,66.1L259.1,64.5L256.3,58.2L265.1,47.0L276.1,40.1L286.8,40.1L290.9,43.1L290.4,46.7L295.1,50.6L303.4,52.0L313.1,50.6L323.2,46.4L329.2,36.5L332.4,28.9L348.1,20.3L358.8,24.6L387.8,25.9L409.5,23.6L422.9,17.7L439.5,17.7L450.6,21.0L452.4,20.7L455.7,19.7L458.4,16.7L469.1,14.4L470.4,11.7L470.0,9.1L468.1,7.8L455.2,9.1L450.1,7.1L449.2,2.2L453.4,-6.0L462.6,-12.6L470.9,-14.3L476.4,-12.6L490.8,-0.1L494.0,0.5L496.3,-1.7L499.1,-3.0L504.1,-0.7L509.2,7.1L510.1,8.4L542.0,5.5L548.9,5.5L570.6,19.3Z"},{"code":"LI","d":"M600.1,121.8L590.0,120.8L588.1,120.8L587.2,114.3L587.7,99.9L593.2,81.5L594.6,84.5L595.1,88.4L596.4,92.3L596.9,97.6L598.8,102.8L602.4,107.7L603.8,112.3L602.0,118.2Z"},{"code":"IT","d":"M1020,394.4L1007.7,402.4L988.8,411.0L974.0,417.6L965.7,416.4L979.1,402.4L973.1,402.1L955.5,411.9L945.4,420.5L942.1,434.5L938.9,457.9L946.8,463.9L960.6,494.5L977.2,507.4L974.0,520L969.8,529.7L959.7,538.2L950.9,531.9L945.8,531.9L942.1,551.9L948.1,594L251.0,594L251.0,594L248.9,590.1L253.1,580.4L260.4,568.2L264.1,560.1L270.1,557.9L272.9,552.9L268.3,532.8L265.5,529.7L261.4,527.2L254.9,526.9L243.8,522.8L235.5,515.9L233.7,506.4L229.5,497.6L222.1,489.1L221.7,480.3L229.5,475.6L241.1,475.2L248.9,477.1L266.9,462.6L273.4,461.3L279.4,458.2L284.0,438.3L288.1,432.2L289.1,428.7L285.4,424.6L271.1,410.3L264.1,395.7L254.0,379.5L244.3,372.2L242.4,366.4L242.0,359.1L244.3,353.0L261.4,343.1L272.0,332.3L272.0,332.3L276.1,336.4L285.8,340.9L311.2,334.8L326.9,329.1L338.4,322.6L345.4,323.9L370.3,333.2L378.6,328.4L396.6,315.9L399.4,309.2L413.2,289.0L413.7,284.1L407.7,271.3L409.5,268.7L427.1,255.5L435.8,243.9L445.1,236.1L451.5,236.1L453.4,238.7L454.3,244.2L453.4,266.4L456.1,273.2L470.0,289.3L479.7,298.3L502.3,304.4L503.2,307.6L497.2,319.4L511.1,333.9L513.4,344.1L519.8,350.2L528.6,347.3L531.4,341.5L528.1,331.9L525.4,321.7L525.8,315.9L528.6,309.2L534.6,299.9L551.7,278.0L557.7,265.8L559.1,246.1L559.1,230.6L564.6,226.8L576.6,229.7L580.3,229.3L582.1,239.0L587.2,254.2L593.2,261.9L599.7,263.9L607.5,263.9L626.5,254.5L638.9,250.7L645.8,251.6L650.0,258.1L659.2,274.8L664.3,276.4L670.3,274.5L672.6,271.9L670.3,265.5L668.0,251.6L664.3,240.6L659.7,235.8L658.8,229.0L661.5,217.4L664.8,207.3L671.2,204.7L679.1,203.5L688.8,213.8L700.3,217.4L709.1,216.7L710.5,210.6L710.0,203.8L704.9,195.3L705.8,182.0L711.8,157.7L715.1,159.6L728.0,159.9L742.3,161.2L751.1,171.3L759.8,174.6L772.8,175.5L781.1,174.2L785.2,170.7L790.3,159.0L799.1,144.3L813.4,137.1L837.4,135.5L849.8,132.9L862.3,133.2L871.5,135.5L881.2,135.2L906.1,125.1L932.0,116.9L935.7,118.2L936.1,121.1L931.5,127.0L926.9,135.2L930.1,144.6L944.5,163.2L952.3,177.5L960.1,188.2L971.7,193.7L986.9,197.3L999.8,198.6L1013.7,202.5L1020,203.8L1020,394.4Z"},{"code":"DE","d":"M1020,34.5L1014.1,29.9L1010.5,25.9L1010.5,21.0L1012.3,17.7L1009.1,11.4L998.0,5.8L986.5,8.4L977.7,12.1L972.1,12.1L966.1,6.5L956.9,2.2L944.5,-0.4L937.1,-3.4L935.2,-1.7L936.1,10.1L933.8,15.4L873.8,22.3L855.4,28.6L842.5,36.8L832.3,40.4L830.0,45.7L820.3,52.3L809.2,54.3L806.5,52.3L799.5,55.2L787.5,58.2L779.7,57.2L776.0,52.0L768.6,43.7L765.4,37.8L765.8,34.2L748.8,33.5L738.1,28.9L715.5,30.2L710.0,28.2L709.1,30.2L705.4,53.6L701.2,63.5L693.8,73.3L684.6,78.9L677.2,79.9L677.7,72.7L679.5,63.8L674.0,61.8L666.1,60.8L662.5,58.2L663.4,51.6L661.5,47.7L658.3,43.1L650.0,37.1L633.4,28.2L621.8,23.6L617.2,28.2L608.9,33.2L596.0,31.5L592.8,33.5L592.8,33.5L570.6,19.3L548.9,5.5L542.0,5.5L510.1,8.4L509.2,7.1L504.1,-0.7L499.1,-3.0L496.3,-1.7L494.0,0.5L490.8,-0.1L476.4,-12.6L470.9,-14.3L462.6,-12.6L453.4,-6.0L449.2,2.2L450.1,7.1L455.2,9.1L468.1,7.8L470.0,9.1L470.4,11.7L469.1,14.4L458.4,16.7L455.7,19.7L452.4,20.7L450.6,21.0L439.5,17.7L422.9,17.7L409.5,23.6L387.8,25.9L358.8,24.6L348.1,20.3L341.7,17.7L337.1,5.1L338.4,-14.0L340.1,-20L1020,-20Z"},{"code":"FR","d":"M340.1,-20L338.4,-14.0L337.1,5.1L341.7,17.7L348.1,20.3L348.1,20.3L332.4,28.9L329.2,36.5L323.2,46.4L313.1,50.6L303.4,52.0L295.1,50.6L290.4,46.7L290.9,43.1L286.8,40.1L276.1,40.1L265.1,47.0L256.3,58.2L259.1,64.5L267.4,66.1L269.2,68.4L269.2,71.7L266.4,75.6L263.2,82.2L246.1,101.8L229.1,121.5L226.3,127.3L221.2,131.6L199.5,142.0L197.2,146.3L195.8,163.8L193.5,178.5L177.4,191.8L161.7,205.4L157.5,213.5L154.8,222.9L149.7,233.9L148.8,239.4L156.6,248.7L155.7,256.1L153.4,267.1L145.5,274.8L137.2,279.0L137.2,290.9L141.8,292.5L152.0,291.5L166.8,283.2L176.0,271.9L170.4,261.6L169.5,259.7L170.9,257.1L182.4,245.8L195.8,239.0L215.2,237.7L238.3,241.6L240.6,243.2L239.2,250.3L241.5,260.6L245.7,267.7L240.1,288.3L244.3,294.4L250.8,302.1L255.8,309.2L263.2,315.6L269.7,326.2L272.0,332.3L261.4,343.1L244.3,353.0L242.0,359.1L242.4,366.4L244.3,372.2L254.0,379.5L264.1,395.7L271.1,410.3L285.4,424.6L289.1,428.7L288.1,432.2L284.0,438.3L279.4,458.2L273.4,461.3L266.9,462.6L248.9,477.1L241.1,475.2L229.5,475.6L221.7,480.3L222.1,489.1L229.5,497.6L233.7,506.4L235.5,515.9L243.8,522.8L254.9,526.9L261.4,527.2L265.5,529.7L268.3,532.8L272.9,552.9L270.1,557.9L264.1,560.1L260.4,568.2L253.1,580.4L248.9,590.1L251.0,594L-20,594L-20,-20Z"},{"code":"AT","d":"M1020,203.8L1013.7,202.5L999.8,198.6L986.9,197.3L971.7,193.7L960.1,188.2L952.3,177.5L944.5,163.2L930.1,144.6L926.9,135.2L931.5,127.0L936.1,121.1L935.7,118.2L932.0,116.9L906.1,125.1L881.2,135.2L871.5,135.5L862.3,133.2L849.8,132.9L837.4,135.5L813.4,137.1L799.1,144.3L790.3,159.0L785.2,170.7L781.1,174.2L772.8,175.5L759.8,174.6L751.1,171.3L742.3,161.2L728.0,159.9L715.1,159.6L711.8,157.7L712.3,151.5L707.2,139.1L698.5,135.2L676.8,158.3L670.8,160.3L653.2,154.1L638.0,144.3L636.6,137.1L633.8,130.9L620.9,125.4L605.2,121.8L600.1,121.8L602.0,118.2L603.8,112.3L602.4,107.7L598.8,102.8L596.9,97.6L596.4,92.3L595.1,88.4L594.6,84.5L593.2,81.5L593.2,81.5L603.8,58.5L605.7,44.4L596.4,35.8L592.8,33.5L596.0,31.5L608.9,33.2L617.2,28.2L621.8,23.6L633.4,28.2L650.0,37.1L658.3,43.1L661.5,47.7L663.4,51.6L662.5,58.2L666.1,60.8L674.0,61.8L679.5,63.8L677.7,72.7L677.2,79.9L684.6,78.9L693.8,73.3L701.2,63.5L705.4,53.6L709.1,30.2L710.0,28.2L715.5,30.2L738.1,28.9L748.8,33.5L765.8,34.2L765.4,37.8L768.6,43.7L776.0,52.0L779.7,57.2L787.5,58.2L799.5,55.2L806.5,52.3L809.2,54.3L820.3,52.3L830.0,45.7L832.3,40.4L842.5,36.8L855.4,28.6L873.8,22.3L933.8,15.4L936.1,10.1L935.2,-1.7L937.1,-3.4L944.5,-0.4L956.9,2.2L966.1,6.5L972.1,12.1L977.7,12.1L986.5,8.4L998.0,5.8L1009.1,11.4L1012.3,17.7L1010.5,21.0L1010.5,25.9L1014.1,29.9L1020,34.5L1020,203.8Z"}],"borders":"M1020,34.5L1014.1,29.9L1010.5,25.9L1010.5,21.0L1012.3,17.7L1009.1,11.4L998.0,5.8L986.5,8.4L977.7,12.1L972.1,12.1L966.1,6.5L956.9,2.2L944.5,-0.4L937.1,-3.4L935.2,-1.7L936.1,10.1L933.8,15.4L873.8,22.3L855.4,28.6L842.5,36.8L832.3,40.4L830.0,45.7L820.3,52.3L809.2,54.3L806.5,52.3L799.5,55.2L787.5,58.2L779.7,57.2L776.0,52.0L768.6,43.7L765.4,37.8L765.8,34.2L748.8,33.5L738.1,28.9L715.5,30.2L710.0,28.2L709.1,30.2L705.4,53.6L701.2,63.5L693.8,73.3L684.6,78.9L677.2,79.9L677.7,72.7L679.5,63.8L674.0,61.8L666.1,60.8L662.5,58.2L663.4,51.6L661.5,47.7L658.3,43.1L650.0,37.1L633.4,28.2L621.8,23.6L617.2,28.2L608.9,33.2L596.0,31.5L592.8,33.5L596.4,35.8L605.7,44.4L603.8,58.5L593.2,81.5L587.7,99.9L587.2,114.3L588.1,120.8L590.0,120.8L600.1,121.8L605.2,121.8L620.9,125.4L633.8,130.9L636.6,137.1L638.0,144.3L653.2,154.1L670.8,160.3L676.8,158.3L698.5,135.2L707.2,139.1L712.3,151.5L711.8,157.7L705.8,182.0L704.9,195.3L710.0,203.8L710.5,210.6L709.1,216.7L700.3,217.4L688.8,213.8L679.1,203.5L671.2,204.7L664.8,207.3L661.5,217.4L658.8,229.0L659.7,235.8L664.3,240.6L668.0,251.6L670.3,265.5L672.6,271.9L670.3,274.5L664.3,276.4L659.2,274.8L650.0,258.1L645.8,251.6L638.9,250.7L626.5,254.5L607.5,263.9L599.7,263.9L593.2,261.9L587.2,254.2L582.1,239.0L580.3,229.3L576.6,229.7L564.6,226.8L559.1,230.6L559.1,246.1L557.7,265.8L551.7,278.0L534.6,299.9L528.6,309.2L525.8,315.9L525.4,321.7L528.1,331.9L531.4,341.5L528.6,347.3L519.8,350.2L513.4,344.1L511.1,333.9L497.2,319.4L503.2,307.6L502.3,304.4L479.7,298.3L470.0,289.3L456.1,273.2L453.4,266.4L454.3,244.2L453.4,238.7L451.5,236.1L445.1,236.1L435.8,243.9L427.1,255.5L409.5,268.7L407.7,271.3L413.7,284.1L413.2,289.0L399.4,309.2L396.6,315.9L378.6,328.4L370.3,333.2L345.4,323.9L338.4,322.6L326.9,329.1L311.2,334.8L285.8,340.9L276.1,336.4L272.0,332.3L269.7,326.2L263.2,315.6L255.8,309.2L250.8,302.1L244.3,294.4L240.1,288.3L245.7,267.7L241.5,260.6L239.2,250.3L240.6,243.2L238.3,241.6L215.2,237.7L195.8,239.0L182.4,245.8L170.9,257.1L169.5,259.7L170.4,261.6L176.0,271.9L166.8,283.2L152.0,291.5L141.8,292.5L137.2,290.9L137.2,279.0L145.5,274.8L153.4,267.1L155.7,256.1L156.6,248.7L148.8,239.4L149.7,233.9L154.8,222.9L157.5,213.5L161.7,205.4L177.4,191.8L193.5,178.5L195.8,163.8L197.2,146.3L199.5,142.0L221.2,131.6L226.3,127.3L229.1,121.5L246.1,101.8L263.2,82.2L266.4,75.6L269.2,71.7L269.2,68.4L267.4,66.1L259.1,64.5L256.3,58.2L265.1,47.0L276.1,40.1L286.8,40.1L290.9,43.1L290.4,46.7L295.1,50.6L303.4,52.0L313.1,50.6L323.2,46.4L329.2,36.5L332.4,28.9L348.1,20.3L358.8,24.6L387.8,25.9L409.5,23.6L422.9,17.7L439.5,17.7L450.6,21.0L452.4,20.7L455.7,19.7L458.4,16.7L469.1,14.4L470.4,11.7L470.0,9.1L468.1,7.8L455.2,9.1L450.1,7.1L449.2,2.2L453.4,-6.0L462.6,-12.6L470.9,-14.3L476.4,-12.6L490.8,-0.1L494.0,0.5L496.3,-1.7L499.1,-3.0L504.1,-0.7L509.2,7.1L510.1,8.4L542.0,5.5L548.9,5.5L570.6,19.3L592.8,33.5M593.2,81.5L594.6,84.5L595.1,88.4L596.4,92.3L596.9,97.6L598.8,102.8L602.4,107.7L603.8,112.3L602.0,118.2L600.1,121.8M711.8,157.7L715.1,159.6L728.0,159.9L742.3,161.2L751.1,171.3L759.8,174.6L772.8,175.5L781.1,174.2L785.2,170.7L790.3,159.0L799.1,144.3L813.4,137.1L837.4,135.5L849.8,132.9L862.3,133.2L871.5,135.5L881.2,135.2L906.1,125.1L932.0,116.9L935.7,118.2L936.1,121.1L931.5,127.0L926.9,135.2L930.1,144.6L944.5,163.2L952.3,177.5L960.1,188.2L971.7,193.7L986.9,197.3L999.8,198.6L1013.7,202.5L1020,203.8M251.0,594L248.9,590.1L253.1,580.4L260.4,568.2L264.1,560.1L270.1,557.9L272.9,552.9L268.3,532.8L265.5,529.7L261.4,527.2L254.9,526.9L243.8,522.8L235.5,515.9L233.7,506.4L229.5,497.6L222.1,489.1L221.7,480.3L229.5,475.6L241.1,475.2L248.9,477.1L266.9,462.6L273.4,461.3L279.4,458.2L284.0,438.3L288.1,432.2L289.1,428.7L285.4,424.6L271.1,410.3L264.1,395.7L254.0,379.5L244.3,372.2L242.4,366.4L242.0,359.1L244.3,353.0L261.4,343.1L272.0,332.3M348.1,20.3L341.7,17.7L337.1,5.1L338.4,-14.0L340.1,-20"};
+const ELE_RAW = "hRgygsgxgmf3fDeXdpclbjalZ4ZLYXX1YFYrZpalbRcFdBdmebfWgOhEhqh5iPi4jdj9kIkjlWmSm0m_mDkrkDjCiUiPiairinhafkecd3eSfQgAgvhui6jciwhlgRfefYfaftgwiTkBl7nIhghIhKhLgnf2fKeteGc9b-bCaPZaYxYXYJYoZwaobVcHdOd3elffgQhDhwh9iRiyjNjxkJknlJmCm3nHmPlDkej2jDi1jKj9jvhmf6fPeeebfjgghaiGjYkYjah_g3fsfdfffmgFhZjIkql_iEh7hzhegqf3fRfDeodXcgbva0Z5ZWY9YgYhZqavbicQdOeAetfagPg-hpiJibixjwkhkhkxlMmQnDnPmslxlBkVjpjejlkhj-hygZfte6eqfwgzh3ipjbkkkAikhfgRftfiflf0gkhhi7kTi5ihiLhwgzf5fofge7d_dOcdbhahZ4ZSYmYcZYaqb3cmdVeGexfbgVhAhoiViwjYkul2lslYlimbnInKnKmlmFlGkZkTj9kkkAiMg0f5fLfNf3gsh6jHjxk4kzjTh6g3gKfofpfuf5gxiCjIjPipiKhjgpgFf4f-fYecdkc0b4bKaOZfYgYbZGaJbmcjdieRe_fogXg-hxidjKj2k7l1mcmSmDmznhnjnxnonMlxlIkxklkyjQhzgmgGfmfvgeg8h-jFkBlMlFjziYh6hJgMgBf0f4gThIiCjJimiHhbgqgIgRgugCfEeBc7cHbVaRZqY6YeYxaBbYcWdoeWfDfogVg7hqiWjHjvkdlNmHmimcm6nrn3oCoponm_mQlnlbkeichVhAgygVgihAhdiJi2kElelNjzjMixiJhag3gkgWgdgvhKjAikiHhbgtgLgthQgdfeeNdac6b6asaAZTYeYeZbarcEdReFe0ffgXg4hhiKixjVj6kelnmum4nCnhoBoWo7pYnsmsl-lAj3iVhkhXhEg_hdh5ibi1i8jwlJk1kJkBjqjGidh-hyh9iChvhOjBiih6hIglgThOhVgdfmeld-dncjbVaeZbYjYgZDaIbScddfeVfLf-glhUh2iUi8jnkPlOmcm6m6njoOovpEpboWnClgkpj7irhuhJg-hCh4ipjNj0j1j9lDlGlPlalKkfjdi_i2jEjkjnipjEifh0hDgsgvhhhVgff_fPeheCdCb8bEZ2YtYnZDZ0arbqcldoetfjgCgwhfh_ipjbj_krlcmNm9ngoKo3pdp2o1nDljkqjriph2hMhChWiVjMj2kXkpkplflzmrnTmtlokrkAkRkwk6kzjzjBikhthJhOh9iQhdgtgcgDfRendScQbcaZZXYyZNZzaZbBb-dFeOfNf5gbhDh0iqjQj-kvlElimfnVoEo5p5p5pHnSlnkejVimh8hThTiAjHjskclDlnltmWmzn3pTobnEl2lElnmEmTmEkJi6iShqhViCjCi0h4hQgzgWfkeldNcRbeamZvY-ZQZ2aXaxbucwd8e5fxgdg-hqikjOj8k0lJldmOnLoIowpZpKo8nHlxkfjYiKhjhfhtinj0kVk7ltmWmfm0nVoOp5pvo3nOmImKm4mmmUkEjCiThvh1iljvjLiThuhEgYfjepdfcybza6Z8Y7ZMZ0aWazbscrdpesfxgohQh4iqjRj4kilAlxmonYoHolo6ojnxmXlPkcj5iah7iHimjjkjlJlvmZnRnmnhnnoZqIq-p6oEm5mpnNmymUjfi_iTh2iNjVkSjpixh_hJgSfoe-eLdgcubtaZZAZIZyaca8bjcWdgeqfpgfhTiGiwjfj6kllVlumpnYoOoopFojnlmXlQkvkijJi_jOjhkEk_l5mcnJoFoioxoto9p7rUq-pvnmnJnbmylXjDi9iciLisj5kij5jBh_hPgYf3fkfDeTdScEa7ZqZXZ4agbFbjcgdleifSgPhWiSi6jokFknldmIm-n3oho6pepOoBmmlok8kwjejWjukGkmlmmam-n5oxpkqnqpqLqFrXrYqdoFnPnJluj1iFi4ikitjVj7kqkBi_iMhxhQgwgXfsegdPcJbKaIZpaJaobMbrcpdneofYgIhMiTi-jrkJkllcmim9naoCovpgpooKm7lslHk6j8jVjjj-kslum7nqofpcqmrSr7rnrOrhqdo-n-nRmNkmjOiajUi-jVj-kWlHkNjLitiniVh-hWgQfNeEdAbhafZvaHazbWbxcmdkebfbgdhQh-i2jukWlMlglymUm8n1oXpUpsoimvl2lalckkjpjpjykdlnnHn_o3qDq7sAtQsxsYqrpGoInRmWlHjwi_jRjrjfj1kLkzlfkojejOjHjYjYh0gmfQeQdKcEbDaFaHaybUbscgdTeUfUgphUiGi0jikVk5lRlfmKm1nxoMpDpsoRmjmDmBmMldkPkmkqkslemqoFpMqArXsJsvtMsKqDovnqmwlgkQjMjAkUj_j-kTkhlDljkkjxjxj-kajohmgUfPeVdJcXbdaZaBatbRbocadKeCfQgYhQiJiyjOjqkOk3lXmPmunXoDpApKnrmtmhmqm7mIk8kzlllql5mdnrofpaqWqzrXsCrmqCoTnEmNlAkFjrjXkUkBkQkqk7lel-lLkJkjk3j_imhOgVfbePdScXbbataJafbOb1cUc3djecfYg0h5ihi8jikLk3lmmVm6ndoLpAopoFnYnOnWnjm3llkhk_lzl7mGm8n8onpRqRq8rir2qoofmylqkykaj4jhkJktkqlKlfl9mgl1kvkukMi8iFhYgefZeOdMccbybSajaWbLcCcacpdVeEfCgShfiAidjckIk2ltmlnJn-ozphpio_oOoMoaoQnXmIk8kwlPlglymZnaoEozqErRr4r7qopZnBl3kykikMkRk7lTlGldmFmgm7mUk3j9jIiZh9hYgNfBedd7c4cHbobHadbDb3cZcvdOd1eqfugwhch_i9j7ktlemMm3nxouplqIphpFpKpZpSoWnXmSldlVlml6mgnTnxoPphq2sDsQrNpmnpmOlYlGkqk3l1lhlmmKmqnFnAmDlKk1j-iThigyf2fIfHecddc6cKbya-a4bjcRc1dfeAewfcgQg2hfifjgkjlUlzmonhn-o3p4p-qGqNqdqRpAoOnbmemAl_mMmqnUnyojp2rFshs1sEqJoMm2l7lllWlxm7mDmDmvnQnhmsl6lclakViWg9gKfcfYfoe5eNdsdCcWbja0bPcCc2dmeYfDfegAgahPiTjhkalUmanCnpoUpLqaq-rSrnrrqlpBoan9nanLmwmxm8neoPpdq1r9tEtsseqzozndm1mdlwl6m_mwnJnyoJncmjl5l7lxj8ighPgPfof5gPfvfFeVdkc3cCbRbLbvcndoecfDfZf5ghhOiVjZkklOmMnMoYpXpvqFqnrYsGrwqFo7oen_oBoZoJnenooGospjqZrVsstqszrQpOoEnkm-mSmEmbnJn3oqoqnumol_mTl8kYi1hhgpgKgchGgrfxe2eCdccebobQbpcSdceIerfBfwgdhKh4jKkMk_mBnOn-oFoZpTqQrMr4rRpspJo7olo0pbpxpBowoypGpdp4qksNtqtosGpXoin_nYm1mymYmvn3oxokn9nOmdmpmNkeixh7g6g3hPh3hqghfRehd-dHcEbVbscPdIdweQe3fogdhMhri6jlkelvmnnEnmoFoypzqurRrPqQpvpyp6pzqEqwrgq8pwpXptqAqVr5tkuLsdqPosoAnvninmnGmqn9orocoCnim_nBmEkjjKiChUhaiMimiLgxfpfDemd1cvb0bucSc4ddd7e4fqgWhFiBi5jXkQlamQmynboDotpgqJq1rUq6qmqkqvqmqxrMrtsVrmqEpqqJq7spuWuusiqkpGoNn-oGn-n2manooCn7n0nhnim5lrkqjRiah0h0ivjFiIg4gMfkfIemdUcHblcDcldVeEe6fugbhMiKitjDj3k1lXl8m7nvolpYqAqxrVrUrZrbrXr6sKsSsKsatGryqsq3rntVunvRtjq-plogococofoelxmdnBnInhngnFmgllkrjfjDiyizjEjUiIg1gXf4fMehdicYbkbqcVdCd-e6fwgehNiBigi2jmkklJl1monWoMpQqGqiq3rErKror4sjtWuMtqs2tOt0sor4rusUtZu8upsHppozokouo6pXlUl8mVmvnqoGnQmmmLlSkCjcjhjfjmjaiThQgzgVfgerd2csbzbjcGc3dveyfmghhXh9ifi6j2kilIl0mZnIn0ovpdpOpZp7qeq7risptRtetttrtfuTuStDsks1tou_u0sPqSpWo2pCpBpwk1lXl8mtnXoMn6nOmflZkkj4j0kAkVkQjCiHhig6f-fGd8dBcWbkb6cudqeafcgZhPh4iejAj-kplLlwmenLnpoIofojo4pjqOqMqlrdr1rirbr6sptjuZt6tdtpugvZuYtUqop1pZphpkp5kek6lgmLm6nxoAnrnCmIlekkkPkslWlRj2i4iMhdgafDeRdnclbpbqckdZeQfUgWg-h1ikjLkFkelKlpmMm9ndoBn7oIoZpPpdpMo-pKptp6qVrErfsNtPuQupuuvKuMtdtUsPqVp-p-pwqDkXkxlLlrmfnaoHoLnmnCmalLk4lXmDl1kcjjilhsgsfYetdvcebwbicUdOd_e-f2gnhbiVjNj4kekylclmmXmpnLnln6ojpAoQoEoQomo-pZp4qSrCrvsCtAunv1v1u1s_sLsBrfqtqSqDqBkck1lOlqmOnNoBoaoGnpm8mBlsmRmymUlLkRjFh8hEfzfDd6cibpbjcBdEd3ehfSgIg_hoijjhj4kOkplMlpl9manToDoOnkndnooBobo1pTpzqdrTr9sBsatVujvmvatnseruraq9qaqpqTkolUl5mZmtnNnvoVoAnsnVmzmam7nZm7mFkzj8ithfgkfmeWcpb1btb5cxdgeJelfFftgShYiKizjskIkqlIlhmQnWnJmvmgmtnWn3oeo9pcqEq-rssGsEsitCtuvTwJvgtmsPrjrPq3q1q1lAlqmenGndnwoMoqoYnenenpnmn8nKmIlikskAishngkfceQdKcqcgcecqdJdedseIetfBfngkheirjXj1kTlBmEm1mYmEmDmhnMnun-ompZqQrLsTtLtpt-udvHu7uqvHu2s4sHrZq7rAq6lzmenInmn8okoyo_o0oioJn-oYnmmllikpj8jaiWhPgIe-d7dcdXdSdXdkd3eCeJeNeDeJexfegWhXiLiyjakMk_lUlXlXlaltmkm-naoWpbqcrutAuEujuuvOucs8tAtYuSuEsSrfrQrQrHmsnYn2oMoppMpvptpWpTpLoyoMm4mJlhkdjoi4h3gwfeeZeDeBd4d9eReZele1fCe3eneKeOfBf0gohXh-ipjcj3kGkckokkk2l5mcnCoGpqqvrfsgtHtQtXsssgsRsQsctZt5sYrxrmrlrYmYm-nhoCoopYqUqnqpqfqKpCnnmel2lYkLjdiahfgTfRejedewevezfBfXftfofufgfNeyehe4frgbhHhqiGixjQjnj5kKkOkclJmPm3nloupoqBqvrbr6rprur5sDsOsjtuuUsrrzr7sErumMmmnEntoXpAp9q2rPrKqLognTmklmk4kEjGh8hOgbflfBfJfmfpf3f5gJgqg1gjgRgBflfIfPf8gqhUh0iFiei8jSjmjzkDkWkxlrmYnHn8ogpQp6qiq2rBrRrNrir8srt_u-tIsSr5sGsImGmtnOnnoNoupZqSqEqVpdoUnEmFlfkZjxi6iDhZgffkfafsgXgsgtgxhRhohohfhWhJgpgIgHgTgxhMh4iTigi3jFjQjdjukNkglNl2mgnUoAolpYqEqBqJqkq9rWrqsUtuvGuUs9sNshslmCmqnHnqoSpCpvp-pnp2o9oHnImKlWkHjZishyg2gJf1gDgqhShqhwhth5iHiRiWiDhshXhEgvgsg6hWiAiljKjYjkjijlj0kIkZk4ldl-mvnooRo7pOpSphqZrNr0sCsitLubvVtzsysus9mCm2nCngoHo8pypZo9oyoEnTmtl0k5jyi-iChSgXf9gOgzhjh7iRicipi3i5jHi9ipiGh5hyhRhEhPiLizjlkQkXkSkTj7kFknk6lWmOm6nPnqn9oXoypApaqTrpsks-tNtrugvbvVt7tDtQmFmum8ncn8oxpnpOogoJnMmtmTlLkdjeihhYgsf7f7gnhYiYixi6jHjnjwjqjujojOjIjHitiBhhhaigjVkWk_k9lBkzkVkOk1lRl1monUnyoEoSoupIppqNqwrtsmtYtxuIu-v6w0vcuWt9mTmwnHnqoMo9pdpNoRnfm3mlltlCkpjMiPgwgIf7gNg-hxitjakCkLkZklkokbkQkCj6j0jQiih9hziXjVkTlQlblSlAkmkXk4lvmXm4nZoHo5ppqFqeq3rVrnr5sltduCu1vrwryExuwHu2mrnOnloFoppSpvpJn8nPmkmAlak3kdi9hrgpgHf7gfhNiUi7jnk9l6l-l3lilXlXlTk-kajujLiciTitjmkglQlalYlFk2khk6l5mZm7noogo_piqprmsKsXspsps1teuZvmwUxVy0y7xSvymDm0m_nvoqpbpmo2ocnjmkmZlwk0kQjUhzgvgYgLgyhpiejGj3lam4m-m1mymemMmClklBkYjci4jDjUkCk1lol5lrlSlJktk1lsmhnNnwoVpCppqGqjq7rrsUs7tduCvVwkxPyAz1zjxtv8lpmGmZnOoYpWpXo3oanxnEmrmKl1lFjwiEgzgzg_hkiZi4jmkOlLmanunnnknXnEmkmBlUkijnjVj5kwk_lcmCmYmAlqlZk5k-lkmjnRnpoPpGp7qLqfq0rXsDsotKtyvFw2yUzh1H0gynwilBlemFnIoFo_pVpEofokoUn3nSmelgj_iYhDhChYiOjGjskBkbkxmAnToJoKn_nwnSmgldkqjsjkkolflymKmXmvmTl5lklQlRlumUm1nbn7oTpEp0qVqrrUsCsmtSuEvCwcyK0A141CyZw-kklBlpmqnyorpQpjpkpKoxoqn5lrkJjOiMhahahriqjdj-kOkvlMmNnJoVo3ovobn0mmlskyjvj5k-mEmfmlmtnKnKmWl4lhlklrl7mPm4ndoAodpSqhrFrjsVtLuAu9vxwuyR0H2A1XynxfkAkblVmXnYoGo8p6qDo7n8nbmUlDkXjai5iFh7iljMjskmlJldl0mlnYoTpXpgpBn9mglvlCkAkMlamPmfmmm6nboRnMmXl8mFmJmDmPm3naoBocpRqbrMsOuPusvUwLxDxny40r2c2AzayKjhkOlHl6mtnmorp6pzoroRnGl-lRk9kCjyjGici0jfj-kwl3mYmfm9n4okqLqapRnbmUl3lBkKkblXmDmZmmmunXoioAm8mwmnmomum0nHnhoColpaqhrrtLuxvvwoyDy8zBzw1a2f2K01zUjQkKkolZmUnXocptqIpWoxnXmimDlakSkFj2jDjKjRjukmlnmjnHnfoRpCp2qMoynNmSmDlNkkk3llmFmnm7m6nVoEoSnrnwnsnnnVnfntn-oZospYqXrmtCuVwAxczM0u1H1n1c1P1L2A0ujZkIkrlXmFnBoGpdqSpvognXnLm3lolIkvkXj6kJjkjikVlPmJnCoCo2pYqBqbpEnim5mclwlYlgmGmqnTncninqoCozoloUoaoYoJn8oEoUoqpGptqjrQsPtlvPw9yp0J0j0t0s0e0i1S1XjikKk5lhmJnBoMpiqCpdoKnpn0m6ljlRlRlSlHk2j7jdkGlGmJnMoLpFpvqurSptoWn2ndmzmhmJmPmwnPnin4oHoWo_pLpJpppqpAo2o0o9pKpcp8qmrWr_tIudwcybzrzezjzwz90B0r1fjkj_knlWmZndojpfpeo-n6n2nnnBlslWlnlql9l4kXjpkFlDmNnPoFo2p1rUr_qipVopoCnjnxnqm9nDnmn6oDoWo0pLpopxqVqXpWpVpjp1p5p_qBqhrRrvspuCv5x7y7y0yxzIzez30a17jSjkkdlUmanYoVpUpRokoJn_nfmwmFlrl-mAmUmVkkkBkClMmcnooEoVpMqlr7rEqCpcoqoJoSohobobosoroqpRptp7qSqTqequqgqbqyqwqTqRqSqirArdsHtjvOw6x-yEyHyPykzTz50_jMjukilcmXnKoCpMpZoroYoKnom-mxmcmWmkm0mnlbkbkRlJmdntoto7pHqJrirhq3qfp4pOpRpzp5pnpdpcpZp5qGqUqnq2rErJrTrIrgryrtrFqpqsrKrysMtHt5vMw1xaxhxlxuyLy4zriyjskelhmMnIoMpVpppKoioYoSoHnwnYnJnYnTmnl-lYk7lgmmnso8qEqNq2rmrmrjrkrVqVqFqSqrqwqhqEqKqcqnq9rir0rwrlrlrkr1sWsOrprMrLrqsRsrtKtrucvlwpxDxNxaxpyIyqigjgkglWmEm9oEo0pGpNo4o8pCpRpPowoIn6nemmmQmDmKmYmpnppQqsrerjsHsfsQsmsnrnq-q6rRrcrWq9rarururvsVsvs0sqsZsRsKsUslsqsbsUsptFtnt8uSuxvowbwyxExNxSxzyUiPjQkVk9lrmlngnmnqoCo2pvqMqEqGqHpIn7nKmtmemynXnrnDnrpBq2scsjtEt9t0tsuEtDsBr4sesusmscsSsSsisvtTt5uGtttXs9s1tAthtxtotptwuEuku2vQwAwVwTwqw4xDxgx9yHh9jHkIkqlWmJmlmkm-nqofpyqwq8rBq0pWoDnYnanEnUoBoboAoJpKrCs-t1t0uLuXurvbu0tUtSuWuPtrtvtvtrtzt5uHuWuiupuSt8t_t8uGuIukvSvQvXvhv-w8w1whwEwUwjw7xUx6xkiajTj3kQkplOlnl-mhncoZpwq2rcrcqGo9oDngn4nun5oRokopospqrFsrtCtJtouRvQwPwRvAuTu9vCumuiuluku-vUuauHuhuduDueuiubuWuTuwvJvXwAw_xsx1wdv4wGwFwIwtxKxzx1ihjFjgj5kTktlJllmCnFoNpfqgrYrYqNpUoZoGoNoLolomozo5pKqNrgsSsnsytaudv8wyw9wFvSvluOtdtUtZt5umuTs4ses8s5sssususvsis4tauFukvZwzxrxHv5vcvfvmwFwgwrxDxKiXiujYj8kTknk_limNnEocpsqgrVrtqupfo1o7ovogo_pDpCpJpnqLq-rlsFs-uEvFwAwgxOw4wGvNtasesJsstCtcs8r4rQrVrLrDrGror7r7sdtKtuuWu-v1w0wsvbu1vQvQvSvfvjvgvyh_ijjDjqkNkslMltmeneowpyqFq1rlq1p1pJpZpMpIpppupcpapwqaq5rRsJtJuTu9v_wTwRvsudtTsbrlrZr1sRsfrwqyqJqKqNqRqcq1rSrzsbtGtzueu-vpwjwVvLuguhueuKt3uTuru3hKh7iljckUlDlominMoLorpApYqKrTq1qDpqpzpsp_qhqyqlqZqerNr1r_sYtbuavDvpvkuuuSs2sIrRq_rMrYrtrVqBpPpPpWpfp0qVq-r5tEtRtduLu0vQv-wzwmvauSt9tmtTtMtdt5t0gghMh8i-jnkblhmdnWoAoEofo3p3q5qtqZqVqdqlqtrasHrzrTrUr9sgs1tFuCu3u_u1ukt6tFsQrWqiqpq7rEqppcogoWodovppqZrYsTtSucu3u0vNvlwFwwxvwXvFuItvtTsksasbsespf_g7hviljPkLk6lqmfnKnroFoNpDqNqZqxrZrorjrosPtEtIsgshtat0tyuZuVuBtktdt-t6s4rlqjptqBqWqGpHoVoNn7oGpoq8sqtruRusvow5wjwuxBxKxsxvvluruJtttMsjsArsrjrkf2g8hxiXjPj3kMk4l3mjm-nAnVoNpCphqjr0sns-tOtFtjt0tmt0uXuSuMt-tGsrseswtquHseq2p1pLpUpLoWn0n0nwn1o7rqtIt3uVvKv9w_x6x0yTy5yiyYwavUuauMuAtasxsMr1rtrlgAhDhxibi2jUjwkUk2lKlmltl_m_oCpDqCrds1t7uOtzuCuRuat8tDs2sdsDr5sCsJsjs-syryqLpAoPnxndnKnQnhnzpGrCsmtXtPt8u0vYv9wtxmyy0Dzgx7wJvRuouYuItmtAsrsTrxrff9gwhYh7iNiljLjnj9kWk7lPlpmtoApGqJrdsmtru6u_uzubtfshrzrZrBqwrUr3rsrmrirfq0peoVnYmwm1nDnKnboIp4rNsQsSsitTuNu7vewDw9yXz9zkxRv5vGutuVuLtotYtAsgr0rYfngPgng0hWh4ifi9jaj-kplMlrm4n-pCqJrLsXtpu3v7vUuLsdrWqzqOp2qYrCrPq4qTpuqIqFohnbmumRmlnFnannohp5q2rKrTrtsgtiudvRvzwhxqy6zVxwwGvWu_unuItztztltSsCrPezfVf0gTg_hgiAigjKjukak9lrmsn2o6p8qzr0tHu2v9vLtasQraqdpdpYqGqXqMpdpEo_p4pmnym6mTmHmTnCnyoLoupqqWqlq3rPrzs4t8utvWv8xEyOy1xywTvuvauzuStzt2tmtHsHrIdyewfOf6gigzhUh-i0jSj4khlUmbnpojpjqcrbsUtrvEvEtgslr7qlpGolpApNo0ocoSogpdpRnVmvmhmBljl1mnnqoTotpXp7qVqkrQsXtQuBuyvPwHxgy4yCwkwCv2viuuuJt6tvtlsurnc6d5epfSf9gdg8hliZi2jVkDlOmdnaoMpHp6q8r1tBufvOuLs_sQqhpOoZodoQoInyndnkoeoom6mRmKlek9k3lJmAnJoDoqpJpYpvqmsBs-thuMvEwDxfyzyHxHwQwQwNvsvBuwufuQuCs8cjdfeLe7fcgFgthaiPitjIj9lHmHm-nzo4psqVq8sUtzuCt0tZsIq-pyonoWoMoDnom5menMnumOl0lnlDkvkzlUlymmn0oQojo8pdqVr0tCtruWvjw-ytzmyxxkw6wiw2w4vovVvbvGuBs1cNdCeFetfNf-gphbh8iXi-j7k9llmfnUohpPqLrVs2tUsZsMrxrCrFqfo6oJn0n1nnmhlvmTmXlolbk1kskvlElhmNmynjnvoPpMqXrCsZtzu8v8xLyNzTy8zEytyVxtxDwMvsvfvTu0tosrb-c8eCeie7fxgphVhviOizjnkxlimRnTogpwrBrus4s1rrq5qPp5qlpooOnvnnninIl2lQlylJkmj5j2kRkzlSl3mZmwnMnkoHpQqcrPsjuQv6xaycybxZxhyCyky2x0wYvcvOvVvTvDtVsH";
+const PISTES_RAW = "e|Boulevard Goitschel|681,251 636,231~a|Goitschel|685,251 677,270 682,327~e|Moraine|831,688 834,686 830,682 781,658 714,591 676,565~a|Cristaux|413,682 440,646 448,623 475,611~a|Combe de Rosaël|453,807 434,829 473,836 482,844 496,848 507,864 524,864~a|Campagnol|858,71 840,50 821,68 822,48 819,48 783,74 770,56 762,35 756,31 721,40 673,41~e|Lac de la Chambre|636,231 667,234 679,228 678,219 667,215 664,209 676,179 699,175 731,156 722,124 686,90 681,81 676,66 679,48 673,41 668,22 667,6 685,-7 691,-19 691,-45 696,-63~e|3 Marches|553,-50 543,-50 524,-20 515,-23 511,-18 503,-18 491,-25 471,1 448,1 439,11 432,13~n|Gentiane|484,605 499,488 498,448 490,440~e|Altiport|571,580 576,590 565,602 555,603 534,597~i|Combe du Vallon|849,60 857,57 867,59 873,54 874,47 865,30 865,16 862,12 851,13 811,-30 804,-61 784,-90 751,-117 728,-124 724,-151~n|2 Combes|740,485 735,487 729,476 718,483 717,493 700,510 696,520~e|Pluviomètre|673,271 653,273 642,282 627,282 622,288 627,300 617,311 580,326 547,349~e|Boulevard du France|408,248 400,240 389,217 384,217 384,223 376,212~i|Longet|127,301 137,276 145,272 141,248 128,233~e||636,231 634,235 623,230 618,232~e|Tête Ronde|897,480 898,485 892,491 884,515 858,515 837,521 824,531 798,533 766,515 750,518 745,514 730,515 716,529 713,526 713,505 707,503~e|Niverolles|630,760 649,749 652,737 703,738 705,735 696,706 685,691~i|Variante|643,754 622,742 616,730 614,706~e|Fond|715,699 711,701 671,686 663,681 658,671 627,650 641,628 634,609 634,594 642,581 645,552~i|Chardons|681,251 687,252 689,263 674,270 670,279 658,286 659,292 681,297 671,315 673,326~e|Plateau|627,650 611,649 588,635 566,613 563,608 569,605~i|Haute Combe|392,587 418,562 428,559 433,547 441,550 468,533 477,511 483,461~e|Chalets|581,539 577,513 596,486 604,483 610,470 598,447 578,432~i|Médaille|671,739 665,699 644,681~e|Plein Sud|695,325 693,321 684,325 683,342 659,350 650,357 643,382 655,388 654,392~e|La Val Tho|649,400 648,403~e|La Val Tho|647,407 641,432 634,441~e|La Val Tho|646,397 649,400~e||648,361 634,374 644,383~e|Génépi|831,688 824,689 758,655 721,621 711,603 684,586 656,561 650,552 649,542~i|Portette|715,699 711,698 704,678 710,642 707,626 685,600 649,572~i|Rochers|158,343 148,341 137,331 126,307~e|Les Enverses|170,224 163,221~i|4 Vents|617,216 610,216 588,229 557,235 543,248 496,259~e|Menuires|391,169 384,161 331,142 317,133~i|Trolles|762,443 752,459~e||240,100 237,96~n||315,98 319,110~i|David Douillet Haut|608,168 604,173 573,180 560,176 556,160 546,153 513,146 496,148~a|Rocher Noir|166,205 170,194 188,178 201,140 235,114 240,100~e|Paturages|536,149 521,135 514,121 500,128 501,145 476,149 472,162 463,166 459,176 464,209 456,225~e||393,173 397,175~e||413,102 417,107~e||320,135 321,130 327,128~i|Falaise|606,749 578,727 561,727 558,719 573,681 574,658 567,643 570,619~e||559,40 559,45~e||490,440 483,438 481,442~e|Lac des Combes|559,45 552,81~e|Allée|483,65 465,55 460,46 461,35 441,32 432,13~e|Boulevard du Sunny|552,81 545,103 530,106 514,121~e|Côte Brulée|557,32 542,26 537,15 539,-8 534,-11 526,-9 523,-20~e|Boulevard de la Becca|559,40 556,29 558,9 535,-25 517,-71~i||555,3 568,-4~a|Dame Blanche|157,342 158,348 171,348 174,326 202,309 206,297 217,288 215,276~n|Boulevard de la Masse|295,113 286,115 282,124 280,147 283,156~i|Bouchet|783,878 787,888 782,913 760,909 742,898 740,891 714,896 693,893 681,904 677,919 679,925~e|Gentianes|553,845 525,855 525,865~e|Boulevard du Téléphérique|408,533 437,545 451,571 467,589 471,609 476,611 484,605~e||490,440 488,442~i|Rhodos|646,664 649,659 646,638 658,606 655,586 649,574 650,552~e|Linotte|571,580 574,581 571,571 581,557 581,539~e|Hermine|576,565 574,551 562,538 559,522 552,515 547,501 544,500 542,508 527,520 522,507 498,473~i|Becca|559,45 540,47 523,43 503,65 483,65~e|Boyes|397,175 374,197 366,224 359,230~e||614,176 620,178 621,183~e||626,174 621,183~i|Boulevard de la Lance|636,231 631,231 617,216~e||640,250 636,231~i||626,175 618,172~i|Allamands|567,-32 554,-15 548,4 542,5 529,-2 508,7 487,26 445,37 431,52~n|Violette|429,51 433,20 425,-1 420,-1 401,22 393,21 376,4 381,-12 366,-17 355,-36 347,-35~e||411,95 414,94~e|Cairn|556,438 547,442 522,439 503,449~e|Pluviomètre|655,250 660,261 656,272~i|Mur Rouge|158,266 166,264 178,271 185,268~e|Boyes|359,230 350,233 333,229 303,199 291,195~n|Fontanettes|324,220 309,200 297,196~i|Aiglon|527,148 522,160 516,161 511,156 510,146~e||815,676 801,675~i||613,235 596,224~e|Boulevard Cumin|284,188 280,180~e||577,328 559,335 539,329~e|Voie de la Boucle|605,403 606,415 617,423~e|Plein Sud|604,400 580,432~e||509,119 515,108 501,82~f|Le Lac de Lou par la Masse|266,435 286,407 297,398 313,399 337,389~e||696,324 695,336 683,342~e||680,327 670,328 653,355~e||684,325 677,333 673,331~e||680,332 678,329~e||497,457 503,449~e|Blanchot|402,594 384,581 389,565 383,555 394,548 395,536 428,534 446,513 439,498 442,491 424,484 411,453 420,451 427,456 457,448 479,451 490,440~n||639,436 622,431~n||577,432 564,440~a|Pylones|463,166 456,154~a|Pylones|485,148 470,145 460,154 434,155~i||551,-3 555,3~e||605,403 600,408~e|Preyerand|296,114 295,113~e||297,115 296,114~e|Bettex|258,27 238,-5 219,-22 207,-48~e|Bettex|260,29 258,27~e|BK Park|506,90 499,89 497,83 493,90 488,83 484,95 469,92~e||422,88 410,93 417,101 417,107~e|Preyerand|254,80 252,81~e|Preyerand|252,81 243,86 243,99 240,100~e|Boulevard du Lac|463,269 457,253~e|Plans|431,210 426,216~e|Petits Creux|429,51 421,66 422,98 407,126 402,154 406,165~e||488,605 487,603~e||490,601 487,603 485,599~e||484,605 487,603~e||664,397 668,403 667,411~e|Bouvreuil bleu|670,29 659,16 657,6 655,-20 663,-29~e|Gaston|392,179 387,204 376,212~i|Alpage|513,287 493,270 448,249~n||393,173 392,166~e||404,165 406,165~e|Chemin des Vallons|272,176 277,177~n||598,433 594,437~e||896,479 897,480~n||432,13 434,9~e|BK Park|469,92 464,96 462,106 455,93 453,100 448,94 442,100 422,88~n||674,452 634,441~e||433,95 430,95~i||557,7 557,2~i|Alpage|566,233 541,270 541,278~e|Boyes|291,195 289,197~e|Boyes|289,197 284,194 284,188~e|Chamois|592,766 595,761~n|Boulevard de la Masse|283,156 281,159~n|Boulevard de la Masse|281,159 285,180 280,180~n||277,177 275,175~n||280,180 277,177~e||340,232 333,244 333,252~n||340,266 341,260 334,256~i|Boulevard de la Lance|617,216 602,209 579,179~e|Plein Sud|629,398 607,390 589,391~e|Chamois|612,733 625,722 625,714 614,706 627,650~n|Musaraigne|613,432 592,429~e||563,608 555,603~e|Éterlou|625,714 625,703 635,688 643,684 646,664~e||514,442 494,443~i|Mauriennaise|525,865 533,882~n|Combe de Thorens|645,552 650,540 647,500 639,452 634,441 596,431 570,433 556,438~e|Lagopede|535,597 527,598 521,609 484,605~e|Pluviomètre|636,231 672,263 673,271~e|Preyerand|257,75 254,80~e||263,84 260,66~e||260,66 257,75~n||308,133 302,130 303,127~e||317,133 297,115~e|Boulevard Cumin|381,359 368,350 359,336 329,266 299,227 292,207 283,197 284,188~i|David Douillet Bas|463,133 442,131 440,146 422,169 418,172 399,171~e||456,241 457,246~e|Retour Sud|646,370 648,378 657,379 660,383 664,397 660,392 654,392~n|Voie Lactée|645,413 646,439 641,444~i|Col de l'Audzin|464,782 455,807 443,801~n|Béranger|675,456 674,452~i|Plan de l'Eau|365,495 372,477 371,469 360,451 347,439 349,416 346,401 328,374 346,354~i|Christine|845,521 838,539 817,541 809,548 783,551 760,571 734,576 686,572~e||680,331 681,335 675,331~a|Stade Yannick Richard|797,440 755,430 693,443~e||678,335 668,332~n|Roc|689,457 681,458 663,451 646,455 638,448~n|Espace Junior|615,551 620,509 623,500 629,499 630,495 630,468 638,458~a|Arolles|571,572 565,560 543,541 529,520~i||154,267 152,273 144,275~e|Bouquetin|49,417 43,403 32,393 46,384 50,370 45,347 68,340 76,329 85,331 93,341 119,341 127,301 145,281 153,278 154,267~i|Boulevard Boismint|483,461 487,458~i||483,461 483,449~i|Boismint|384,578 380,561 360,529 365,495 391,476 397,464 406,458 413,459~i|Boulevard Boismint|413,459 420,456 427,463 443,466 459,458 483,461~i||82,411 55,399~i|Fréderic Covili|55,399 73,364 100,354 115,342 114,294 108,270 132,222~a|Lac Noir|46,352 42,343 41,321 31,300 45,298 69,307 77,286 92,285 108,275~i|Longet|154,267 145,268~e|Chemin des Vallons|187,268 191,273 211,276~a|Léo Lacroix|577,179 574,185 559,187 548,203 532,210 505,209 491,203 485,209 464,209~a|Léo Lacroix|464,209 459,208 439,183 426,184 411,173 399,171~e|Plan du Bouquet|525,289 517,295 506,295 493,290 480,278 465,280 458,288 451,289 429,272~e|Mont de la Chambre|621,183 615,207 620,227 589,256 585,264 590,282 587,289 549,276 526,289 518,289 513,287 485,245 462,233 456,241~e|Traversée de Montaulever|539,329 536,333 545,347~e|Dalles|735,487 716,494 699,509 683,507 672,489 648,477 639,454~e|Boulevard des Girauds|432,13 430,-8 412,-51 404,-62 375,-70 359,-88 351,-111~n||348,132 330,112~n|Campagnols|631,447 629,443 610,438~i|Vires|900,447 894,429 867,413 842,426~n|Flocon|653,505 652,462 663,451~i|Ardoises|742,486 752,459~n||676,565 654,545 650,537~e||515,122 514,114~e|Tétras|402,534 385,508 395,502 414,461 392,441 390,434 405,428 401,418 413,396 408,391 398,392 386,380 376,379 359,369 356,361 346,354~e||510,118 512,123~n||609,435 607,441~e||557,42 559,40~e||503,449 505,450~e|Bettex|272,39 260,66 257,47~e|Bettex|257,47 257,46~e|Bettex|257,46 260,29~e|Bettex|275,37 272,39~i||716,444 714,449~i||496,259 493,270~e|Boulevard de la Tête|148,341 131,348 111,346~e|Chemin des Vallons|205,245 214,248 213,237 226,245 216,225 236,234 242,233 228,216 234,215 233,210 238,215 238,208 223,180 224,167 218,159~n||676,444 670,450~i|Combes|515,108 498,112 469,92~a|Cascades|728,476 698,468 696,455~e|Boulevard Gury|466,135 432,96 414,94~i|Mauriennaise|592,766 583,787 585,807 573,818 570,832 560,842~e||575,588 579,599 565,602~e||240,100 240,103~i|Venturon|621,183 618,172 594,162 594,154 611,137 606,110 617,98 623,70 639,47 642,29 637,8 643,-16~e|Boulevard Cumin|490,440 474,433 453,403 420,370 402,369 381,361~i|Béranger|897,480 843,489 829,470 816,462 785,470 761,464 728,447 689,457~i|Lac Blanc|899,482 905,476 902,448 871,430 853,440~n||669,442 662,451~n||647,407 647,415~e|Chocard|746,764 741,763 741,750 727,733 711,698~i|Asters|747,764 753,734 752,720 775,678~n||650,532 652,523~e||715,698 719,694~i|Les Grandes Combes|416,89 401,82 383,82 365,51 335,32~e||703,738 725,728~e||457,246 454,244~e|Chocard|724,725 727,698 721,692 717,694~e|Bettex|283,24 280,27~e|Bettex|280,27 275,37~e|Bettex|321,56 310,38 307,17 300,23 298,11 283,24~e||589,419 588,425 595,433~i||150,274 145,268~e||402,154 384,161~e||350,233 345,240 347,242~e||329,226 327,240 333,249~e||752,742 735,740 749,728 742,728 751,711 730,714 728,710~e||719,714 718,698~e|Access UCPA|545,410 547,416~e|Chemin des Vallons|210,264 202,257 207,249 205,245~e|Les Enverses|163,221 161,218 168,214~e|Enverses|132,222 132,218~e|Les Enverses|168,214 168,207 163,205 147,217 138,217 132,222~e|Les Enverses|132,218 171,133 184,138 194,156 210,156 238,169~e|Les Enverses|173,222 170,212~e|Les Enverses|173,225 173,222~e|Vallons|178,229 185,268 194,256 207,248 225,223 230,191 238,169 246,170 267,184 277,177~e|Vallons|154,267 160,261 156,234 164,225 173,225~e|Vallons|173,225 178,229~e|Chemin des Vallons|237,158 228,156 210,135 211,131 224,131 227,143 244,147 272,176~n|Violette|347,-35 344,-15 339,-10 337,26 331,37 330,54~n|Violette|328,112 320,108 322,124 317,133~n|Violette|330,112 328,112~i|Col de l'Audzin|469,795 463,782 448,800 435,802 427,797 426,781 433,744 441,739 441,735 436,726 428,725 422,719 423,711 411,689 413,682 432,678 433,672 445,674 447,661 457,660 461,650 467,655 474,642 492,643 492,634 481,617 481,608~n|Traversée Deux Lacs|581,539 591,534 615,551 633,558~n|Traversée Deux Lacs|633,558 645,552~e||755,713 751,712~e|Les Plans|389,217 368,211~e|Boulevard du France|426,216 414,234 410,248 405,251~e||327,233 327,237~e||328,225 328,226~e||408,248 401,246~e|Les Plans|426,216 417,220 389,217~n||327,226 326,232~e||388,536 395,536~n||650,535 653,535~n||317,133 304,134 305,138~e|Access UCPA|547,416~e|Access UCPA|547,416~n|Accès UCPA|552,441 539,427 540,420 547,416 535,414 531,415 524,434 517,441~n||350,228 349,223~e||170,225 170,224~e||346,354 346,355~e||469,92 461,87~n||639,452 643,439~f|Bouchet - Lory|784,879 788,878 796,858 824,844 825,834 811,818 792,816 769,806 743,807~a|Triton|639,244 626,251 616,265 623,285~f|Itinéraire du Mont Vallon|854,68 843,75 834,87 814,92 785,110 745,112 717,118~e||624,648 625,650~e||569,603 570,605~e||624,648 622,651~e||345,237 345,241~e|Lory|750,763 768,763 774,770 784,771 808,789 760,787 757,800 749,805 699,820 657,838 595,888 569,900~i||420,671 435,672~n||329,68 329,72~e||329,68 330,67~i|Chasse|379,313 382,345 395,361~i|Chasse|382,312 379,313~e|Pont de la Chasse|381,361 381,359~e||399,171 397,175~i|Chasse|395,363 385,362~n|Montagnette|379,169 356,164 345,174 339,159 330,155 308,133~i|Plan de l'Eau|396,500 381,482 372,477~i|Chasse|395,361 395,363~i|Adrien Théaux|762,443 756,446 742,442 676,444~i|Croissant|807,421 772,420 762,416 752,424 736,429 720,431 712,422 708,425~i||834,424 842,426~n||646,446 643,450~n||639,452 644,450~f|Le Lac de Lou par la Masse|50,419 47,429 60,444 66,461 64,500 84,503 85,513 125,533 134,526 159,519 163,506 168,502 195,493 215,474 233,466 262,434 266,435~n||664,425 660,440~i|Corniche|708,425 707,434 687,441~i|Lac de la Chambre|621,183 629,225 636,231 656,219 664,209~e||687,441 681,437~n||660,441 658,447~n||680,442 676,439~e|Corniche|687,441 676,444~a|Masse|72,422 83,408 80,382 88,359~i|Fréderic Covili|49,417 55,399~a|Armoise|399,580 409,587 441,585 449,583 455,576~e||640,434 641,436~e||645,413 643,413~n||611,436 607,437~e|Voie de la Boucle|618,424 622,431 613,432~a|Combe de Caron|519,765 496,767 492,755 492,705 468,664 469,653~e|La Voie de la boucle|629,398 618,398~e|La Voie de la boucle|611,396 604,397~e|Voie de la boucle|615,398 611,396~e|Plein Sud|618,398 616,398~e|Plein Sud|616,398 615,398~i||635,373 624,385~i|Adrien Théaux|808,426 807,431 791,444 762,443~i|Crêtes|55,399 46,384~e||673,408 668,405~i|Mauriennaise|560,842 546,852 533,882 547,934~e|Traversée de Montaulever|531,286 528,303 539,317 539,329~i|Chasse|429,272 418,291 410,292~e|Bruyères|445,252 429,272 421,262 409,259 401,246 388,258 377,256 355,232~i|Boulevard Boismint|495,459 497,457~e|Paturages|431,210 419,201 403,174~e|Paturages|445,252 440,253 436,248 435,226~e|Alpage|453,255 445,252~e|Boulevard des Echauds|483,320 469,309 472,305 471,300 468,302 469,287 464,280 463,269 455,266~e|Paturages|456,225 456,241 445,252~e|Lac des Combes|552,81 537,75 527,92 515,91 483,65 461,87 422,88~e|Preyerand|295,113 282,98 261,83 257,75~i|Chasse|410,292 405,300 411,312 409,323 394,320 382,312~e|Friendly Natural Park|203,255 213,257 216,252 218,256 223,253 225,259 231,260 246,241 242,232~a|Liberty Ride|68,406 71,395 63,382~i||888,509 877,512 865,507 851,488~e|Piste de Rosaël|525,871 502,918~n||619,431 611,436~u||610,438 608,438~u||607,437 602,433~e|Boulevard Rosaël|629,760 612,757 595,761~i|Piste de la Cime Caron|460,782 452,776 462,766 485,788 499,791 512,782 522,760 531,764 555,760 559,753 529,735 530,729 540,723 559,729 568,712 587,709 592,703 604,699 609,680 618,674~e||406,165 399,171~n|Boulevard du Doron|258,149 248,136 240,106~n||274,175 277,177~n|Boulevard du Doron|274,175 273,174~e|Boulevard Gury|485,148 466,135~i|Cime|618,674 620,671~e||75,423 72,422~e||345,237 343,232~i|Corniche|683,342 674,358 700,387 702,394 696,411 708,421 708,425~i|Boulevard 2 Ours|427,456 432,462 449,464~i|Boulevard Lauzes|816,462 808,469 778,479~e||622,651 611,662 607,661 598,656 595,648 587,648 588,642 571,636 570,630~e||470,307 455,295 454,289~e||340,232 327,237~e|Boulevard Rosaël|630,760 629,760~e|Plein Sud|604,397 604,400~e|Chamois|595,761 612,748 589,749 585,746 612,733~e|Boulevard des Echauds|545,347 526,333 514,332 504,324~e|La Voie de la boucle|646,394 629,398~e|Plein Sud|650,394 649,394~e|Plein Sud|654,392 650,394~e|La Val Tho|646,395 646,397~n|Violette|330,54 331,68 327,78 330,92~e|Paturages|435,226 431,210~e|Bouquetin|72,422 49,417~u||652,534 653,534~e||606,414 601,416 597,413~i|Skicross Jean-Fred Chapuis|592,491 579,476 594,454 583,436~a||840,50 829,42 820,48~n||369,168 361,172 362,176 356,172 352,174 352,167~e|Boulevard des Echauds|504,324 485,320~e|Traversée de Montaulever|583,388 602,395~e|Voie de la Boucle|604,400 605,403~e||609,402 605,403~i|Néves|494,742 501,732 518,725 537,711 558,718~i|Col de l'Audzin|472,786 474,791 469,790~e||579,586 574,586~e||576,585 574,581~e||567,434 559,427~e||560,436 558,428~e|Boulevard Cumin|381,361 356,361~n||610,438 610,440~e|Plein Sud|649,394 646,394~e|La Val Tho|646,394 646,395~e|Traversée de Montaulever|545,347 568,371~e|La Val Tho|648,403 647,407~f|Caron-Lac du Lou|432,828 389,841 366,830 357,818 341,810 323,808 313,792 310,740 290,719 281,701 270,665 237,593 247,459~e|Face Nord|741,759 779,741 788,732 776,709 778,690 768,660~n|Violette|330,92 330,112~e|Boulevard des Echauds|455,266 450,264 453,255~e|Boulevard des Echauds|485,320 483,320~e|Traversée de Montaulever|602,395 604,397~i|Boulevard Lauzes|846,423 853,433~i|Boulevard Lauzes|778,479 742,486~e|Bleuets|673,474 674,469~n|2 Combes|696,520 690,529~n|2 Combes|690,529 686,540~e|Traversée de Montaulever|568,371 583,388~e|Gentianes|525,865 525,871~e|Chemin des Vallons|185,268 187,268~e|Chemin des Vallons|211,276 215,274 210,264~e|Chemin des Vallons|238,169 237,158~i|Boulevard Lauzes|853,433 853,440 825,445 818,452 816,462~i|Croissant|842,426 831,427 820,421 807,421~i|Adrien Théaux|820,421 808,426~i|Boulevard Lauzes|843,424 846,423~e|Boulevard Rosaël|631,759 629,761~i|Cime|464,782 460,782~e||344,239 339,233~e|Bleuets|674,469 689,463 690,459~e|Bleuets|690,459 689,457~e|Bleuets|674,492 673,474~n||662,553 662,537 645,489~e|Lou|337,389 343,381 357,382 369,368 381,361~i||142,273 143,274~n|Boulevard du Doron|273,174 258,149~n|Boulevard du Doron|240,106 239,102~e|Bettex|331,68 330,67~e|Bettex|330,67 321,56~i|Boulevard Boismint|487,458 495,459~e|Fun Slope|615,551 625,554 630,549 638,551 638,528 648,533 647,505~i||612,749 619,751 624,745~n|2 Combes|686,540 677,551 676,565~n|2 Combes|676,565~e||517,110 511,90~e||550,81 547,81 541,103 534,99 525,108 515,111~e|Gentianes|590,763 594,780 585,781 581,790 572,785 569,793 578,807 590,814 590,822 563,842 553,845~i|Alouette|570,-36 574,-36 575,-26 568,-3 575,10 585,12 597,21 602,32 637,8~n|Montagnette|399,171 392,168 387,179 379,169~e|Paturages|403,174 399,171~e||773,662 775,654~e||778,655 774,654~e||750,761 750,763~e||768,660 771,653 775,654~e||809,680 804,671~e||746,764 747,764~n||273,173 274,175";
+const LIFTS_RAW = "S|Cascades|607,441 740,485~S|Portette|653,535 715,698~G|Caron|505,450 490,600~C|Cime Caron|490,602 472,786~S|Boismint|481,442 402,594~S|Tortollet|240,103 315,98~G|Roc 1|305,138 429,51~G|Cairn|505,450 609,402~D|Masse|144,275 142,292 158,343~S|Moutière|488,442 571,580~G|Grand Fond|534,597 630,760~S|Rosaël|550,977 590,763~S|Bouchet|681,933 783,878~D|Plateau 2|569,605 624,648~G|Moraine|652,523 831,688~S|Plein Sud|564,440 695,325~C|Funitel 3 Vallées|673,331 640,250~S|3 Vallées|675,331 681,251~S|Mont de la Chambre|392,166 614,176~S|Becca|414,94 557,42~S|Roc 2|434,9 557,-27~G|Bruyères 2|457,246 615,184~G|Mont Vallon|706,-69 858,71~S|Doron|275,173 393,173~S|Menuires|303,127 404,165~S|Pionniers|643,439 680,332~K|Castor Pollux|641,436 645,413~G|Croisette|273,173 296,145~D|Stade|327,128 382,136 393,133 400,126 413,102~S|Plan de l'Eau|346,355 388,536~S|Sunny Express|347,242 509,119~S|Reberty|279,183 344,236~C|Preyerand|275,88 306,105~K|Plans|334,256 340,266~K|Musaraigne|592,429 613,432~K|Campagnols|610,440 631,447~K||369,172 374,173~D|Jardin d'Enfants|305,151 317,172~K|Preyerand|278,93 288,99~G|Côte Brune|641,-12 626,174~C|Thorens|719,694 746,764~D|Plateau 1|570,605 624,648~S|Bettex|203,-49 329,68~D||676,450 710,447~S|Lac Blanc|644,450 834,424~G|Funitel Péclet|594,437 896,479~K|Bruyères|326,232 327,226~K|Reberty|349,223 350,228~K|Pelvoux|309,121 316,127~G|Télécabine d'Orelle-Caron|545,982 469,795~G|Pointe de la Masse|277,183 75,423~K||619,434 623,434~K||629,436 631,436~K|TPS VCS|357,171 362,169~G|Bruyères 1|333,252 457,246~G|Face Nord|774,654 750,761~G|Deux Lacs|559,427 579,586";
+const NS = "http://www.w3.org/2000/svg";
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function el(tag, attrs, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+/* ================= data ================= */
+const K = MAPDATA.k, TX = MAPDATA.tx, TY = MAPDATA.ty;
+function proj(lon, lat){ const l = lon*Math.PI/180, p = lat*Math.PI/180; return [K*l+TX, -K*Math.log(Math.tan(Math.PI/4+p/2))+TY]; }
+const COUNTRY = {FR:"France", CH:"Switzerland", IT:"Italy"};
+const AREAS = {"3v":"Les 3 Vallées", ek:"Espace Killy", pd:"Paradiski", sb:"Espace San Bernardo", ps:"Portes du Soleil", gm:"Grand Massif", em:"Évasion Mont-Blanc", vl:"Via Lattea", mt:"Matterhorn Ski Paradise", sr:"Sella Ronda"};
+const AIRPORTS = [
+  {c:"GVA", n:"Geneva", full:"Geneva Airport", lat:46.238, lon:6.109},
+  {c:"LYS", n:"Lyon", full:"Lyon-Saint Exupéry Airport", lat:45.726, lon:5.091},
+  {c:"CMF", n:"Chambéry", full:"Chambéry Savoie Mont Blanc Airport", lat:45.639, lon:5.880},
+  {c:"GNB", n:"Grenoble", full:"Grenoble Alpes-Isère Airport", lat:45.363, lon:5.329},
+  {c:"TRN", n:"Turin", full:"Turin Airport", lat:45.200, lon:7.650},
+  {c:"MXP", n:"Milan Malpensa", full:"Milan Malpensa Airport", lat:45.630, lon:8.723},
+  {c:"BGY", n:"Milan Bergamo", full:"Milan Bergamo Airport", lat:45.674, lon:9.704},
+  {c:"ZRH", n:"Zurich", full:"Zurich Airport", lat:47.458, lon:8.548},
+  {c:"BSL", n:"Basel-Mulhouse", full:"EuroAirport Basel Mulhouse Freiburg", lat:47.590, lon:7.529},
+  {c:"INN", n:"Innsbruck", full:"Innsbruck Airport", lat:47.260, lon:11.344},
+  {c:"VRN", n:"Verona", full:"Verona Villafranca Airport", lat:45.396, lon:10.889},
+  {c:"VCE", n:"Venice", full:"Venice Marco Polo Airport", lat:45.505, lon:12.352},
+  {c:"TSF", n:"Treviso", full:"Treviso Airport", lat:45.648, lon:12.194}
+];
+const M = "Moûtiers-Salins-Brides-les-Bains", B = "Bourg-Saint-Maurice";
+const RESORTS = [
+  {id:"courchevel", name:"Courchevel", cc:"FR", lat:45.415, lon:6.634, alt:"1550–1850 m", area:"3v", st:M, v:[["Courchevel 1850","courchevel",124],["Courchevel 1650","courchevel-1650",76],["Courchevel 1550","courchevel-1550",64]]},
+  {id:"meribel", name:"Méribel", cc:"FR", lat:45.396, lon:6.566, alt:"1450 m", area:"3v", st:M, v:[["Méribel","meribel",89]]},
+  {id:"valthorens", name:"Val Thorens", cc:"FR", lat:45.298, lon:6.580, alt:"2300 m", area:"3v", st:M, note:"One of the highest resort villages in Europe, so snow is reliable early and late in the season.", v:[["Val Thorens","val-thorens",65]]},
+  {id:"menuires", name:"Les Menuires", cc:"FR", lat:45.323, lon:6.538, alt:"1850 m", area:"3v", st:M, v:[["Les Menuires","les-menuires",27]]},
+  {id:"latania", name:"La Tania", cc:"FR", lat:45.432, lon:6.594, alt:"1350 m", area:"3v", st:M, v:[["La Tania","la-tania",21]]},
+  {id:"stmartin", name:"Saint-Martin-de-Belleville", cc:"FR", lat:45.380, lon:6.505, alt:"1450 m", area:"3v", st:M, v:[["Saint-Martin-de-Belleville","saint-martin-de-belleville",14]]},
+  {id:"valdisere", name:"Val d'Isère", cc:"FR", lat:45.448, lon:6.980, alt:"1850 m", area:"ek", st:B, v:[["Val d'Isère","val-disere",95]]},
+  {id:"tignes", name:"Tignes", cc:"FR", lat:45.469, lon:6.906, alt:"2100 m", area:"ek", st:B, v:[["Tignes","tignes",69]]},
+  {id:"lesarcs", name:"Les Arcs", cc:"FR", lat:45.575, lon:6.802, alt:"1600–2000 m", area:"pd", st:B, note:"A short funicular runs from Bourg-Saint-Maurice station up to Arc 1600.", v:[["Les Arcs 2000","les-arcs",27],["Les Arcs 1600","les-arcs-1600",20],["Les Arcs 1800","les-arcs-1800",20],["Les Arcs 1950","les-arcs-1950",19]]},
+  {id:"laplagne", name:"La Plagne", cc:"FR", lat:45.507, lon:6.677, alt:"1250–2100 m", area:"pd", st:"Aime-La Plagne", v:[["La Plagne Centre","la-plagne",16],["Bellecôte","la-plagne-bellecote",10],["Belle Plagne","la-plagne-belle-plagne",10],["Plagne Soleil","la-plagne-soleil",10],["Plagne 1800","la-plagne-1800",9],["Aime 2000","la-plagne-aime-2000",9],["Plagne Villages","la-plagne-villages",9],["Montchavin","la-plagne-montchavin",7]]},
+  {id:"peisey", name:"Peisey-Vallandry", cc:"FR", lat:45.554, lon:6.764, alt:"1600 m", area:"pd", st:"Landry", v:[["Peisey-Vallandry","peisey-vallandry",8]]},
+  {id:"stefoy", name:"Sainte-Foy-Tarentaise", cc:"FR", lat:45.590, lon:6.880, alt:"1550 m", st:B, v:[["Sainte-Foy-Tarentaise","sainte-foy-tarentaise",8]]},
+  {id:"larosiere", name:"La Rosière", cc:"FR", lat:45.627, lon:6.851, alt:"1850 m", area:"sb", st:B, note:"Lift-linked across the border with La Thuile in Italy.", v:[["La Rosière 1850","la-rosiere-1850",13]]},
+  {id:"chamonix", name:"Chamonix", cc:"FR", lat:45.924, lon:6.869, alt:"1035 m", st:"Chamonix-Mont-Blanc", v:[["Chamonix","chamonix-mont-blanc",61],["Argentière","argentiere",18],["Les Houches","les-houches",15]]},
+  {id:"megeve", name:"Megève", cc:"FR", lat:45.857, lon:6.617, alt:"1113 m", area:"em", st:"Sallanches", v:[["Megève","megeve",60]]},
+  {id:"stgervais", name:"Saint-Gervais", cc:"FR", lat:45.892, lon:6.712, alt:"850 m", area:"em", st:"Saint-Gervais-Le Fayet", v:[["Saint-Gervais","saint-gervais-mont-blanc",36]]},
+  {id:"contamines", name:"Les Contamines", cc:"FR", lat:45.822, lon:6.727, alt:"1164 m", area:"em", st:"Saint-Gervais-Le Fayet", v:[["Les Contamines-Montjoie","les-contamines-montjoie",20]]},
+  {id:"avoriaz", name:"Avoriaz", cc:"FR", lat:46.191, lon:6.773, alt:"1800 m", area:"ps", st:"Cluses", note:"Car-free resort. You park at the entrance and continue on foot, by sleigh or on skis.", v:[["Avoriaz","avoriaz",58]]},
+  {id:"morzine", name:"Morzine", cc:"FR", lat:46.179, lon:6.709, alt:"1000 m", area:"ps", st:"Cluses", v:[["Morzine","morzine",44]]},
+  {id:"lesgets", name:"Les Gets", cc:"FR", lat:46.157, lon:6.669, alt:"1172 m", area:"ps", st:"Cluses", v:[["Les Gets","les-gets",29]]},
+  {id:"chatel", name:"Châtel", cc:"FR", lat:46.264, lon:6.840, alt:"1200 m", area:"ps", st:"Thonon-les-Bains", v:[["Châtel","chatel",7]]},
+  {id:"flaine", name:"Flaine", cc:"FR", lat:46.006, lon:6.689, alt:"1600 m", area:"gm", st:"Cluses", v:[["Flaine","flaine",16]]},
+  {id:"samoens", name:"Samoëns", cc:"FR", lat:46.083, lon:6.727, alt:"720 m", area:"gm", st:"Cluses", v:[["Samoëns","samoens",10]]},
+  {id:"alpedhuez", name:"Alpe d'Huez", cc:"FR", lat:45.092, lon:6.069, alt:"1860 m", st:"Grenoble", v:[["Alpe d'Huez","alpe-dhuez",13]]},
+  {id:"2alpes", name:"Les 2 Alpes", cc:"FR", lat:45.007, lon:6.122, alt:"1650 m", st:"Grenoble", v:[["Les 2 Alpes","les-2-alpes",9]]},
+  {id:"montgenevre", name:"Montgenèvre", cc:"FR", lat:44.931, lon:6.725, alt:"1860 m", area:"vl", st:"Briançon", v:[["Montgenèvre","montgenevre",8]]},
+  {id:"sestriere", name:"Sestriere", cc:"IT", lat:44.957, lon:6.879, alt:"2035 m", area:"vl", st:"Oulx", v:[["Sestrière","sestriere",9]]},
+  {id:"cervinia", name:"Cervinia", cc:"IT", lat:45.934, lon:7.630, alt:"2050 m", area:"mt", st:"Châtillon-Saint-Vincent", note:"Lift-linked with Zermatt over the Swiss border.", v:[["Cervinia","cervinia",35]]},
+  {id:"courmayeur", name:"Courmayeur", cc:"IT", lat:45.792, lon:6.972, alt:"1224 m", st:"Aosta", note:"The Mont Blanc Tunnel connects it with Chamonix.", v:[["Courmayeur","courmayeur",29]]},
+  {id:"lathuile", name:"La Thuile", cc:"IT", lat:45.716, lon:6.951, alt:"1441 m", area:"sb", st:"Aosta", v:[["La Thuile","la-thuile",21]]},
+  {id:"pila", name:"Pila", cc:"IT", lat:45.734, lon:7.317, alt:"1800 m", st:"Aosta", note:"A gondola runs straight up from the town of Aosta.", v:[["Pila","pila",9]]},
+  {id:"champoluc", name:"Champoluc", cc:"IT", lat:45.832, lon:7.726, alt:"1568 m", st:"Verrès", v:[["Champoluc","champoluc",7]]},
+  {id:"zermatt", name:"Zermatt", cc:"CH", lat:46.020, lon:7.749, alt:"1608 m", area:"mt", st:"Zermatt", note:"Car-free village. Drivers park in Täsch and take the shuttle train.", v:[["Zermatt","zermatt",31]]},
+  {id:"verbier", name:"Verbier", cc:"CH", lat:46.096, lon:7.228, alt:"1500 m", st:"Le Châble", note:"A gondola runs up from Le Châble station.", v:[["Verbier","verbier",17]]},
+  {id:"crans", name:"Crans-Montana", cc:"CH", lat:46.311, lon:7.481, alt:"1500 m", st:"Sierre", note:"A funicular runs up from Sierre.", v:[["Crans-Montana","crans-montana",10]]},
+  {id:"gstaad", name:"Gstaad", cc:"CH", lat:46.475, lon:7.286, alt:"1050 m", st:"Gstaad", v:[["Gstaad · Saanen · Rougemont","gstaad-saanen-rougemont",6]]},
+  {id:"altabadia", name:"Alta Badia", cc:"IT", lat:46.550, lon:11.873, alt:"1324–1568 m", area:"sr", st:"Brunico (then bus)", v:[["Corvara","corvara",24],["Alta Badia","alta-badia",18],["San Cassiano","san-cassiano",12],["La Villa","la-villa",11]]},
+  {id:"valgardena", name:"Val Gardena", cc:"IT", lat:46.556, lon:11.740, alt:"1236–1563 m", area:"sr", st:"Ponte Gardena (then bus)", v:[["Val Gardena","val-gardena",17],["Selva Gardena","selva-gardena",13],["Santa Cristina","santa-cristina-val-gardena",10],["Ortisei","st-ulrich-ortisei",8],["Selva · Sella Ronda","selva-sella-ronda",8]]},
+  {id:"valdifassa", name:"Val di Fassa", cc:"IT", lat:46.477, lon:11.770, alt:"1320–1460 m", area:"sr", v:[["Val di Fassa","val-di-fassa",13],["Campitello","campitello-di-fassa",11],["Canazei","canazei-di-fassa",11],["Pozza di Fassa","pozza-di-fassa",7]]},
+  {id:"arabba", name:"Arabba", cc:"IT", lat:46.497, lon:11.875, alt:"1602 m", area:"sr", v:[["Arabba","arabba",9]]},
+  {id:"cortina", name:"Cortina d'Ampezzo", cc:"IT", lat:46.540, lon:12.136, alt:"1224 m", st:"Calalzo (then bus)", note:"Venue of the Milano Cortina 2026 Winter Olympics.", v:[["Cortina d'Ampezzo","cortina-d-ampezzo",28]]},
+  {id:"kronplatz", name:"Kronplatz", cc:"IT", lat:46.796, lon:11.937, alt:"835 m (Bruneck)", st:"Bruneck / Brunico", v:[["Bruneck · Kronplatz","bruneck-kronplatz",10]]},
+  {id:"sanpellegrino", name:"Passo San Pellegrino", cc:"IT", lat:46.380, lon:11.787, alt:"1918 m", v:[["Passo San Pellegrino","passo-san-pellegrino",10]]},
+  {id:"carezza", name:"Carezza", cc:"IT", lat:46.408, lon:11.574, alt:"1600 m", v:[["Carezza","carezza",6]]},
+  {id:"livigno", name:"Livigno", cc:"IT", lat:46.538, lon:10.135, alt:"1816 m", st:"Tirano (then bus)", note:"Venue of the Milano Cortina 2026 Winter Olympics.", v:[["Livigno","livigno",7]]},
+  {id:"campiglio", name:"Madonna di Campiglio", cc:"IT", lat:46.229, lon:10.826, alt:"1550 m", v:[["Madonna di Campiglio","madonna-di-campiglio",7]]}
+];
+/* bergfex piste-map pages, checked 23 Oct 2026; [slug, name of the map bergfex shows] */
+const BERGFEX = {
+  courchevel:["courchevel","Courchevel / Les 3 Vallées"], meribel:["meribel","Méribel / Les 3 Vallées"], valthorens:["val-thorens","Val Thorens / Les 3 Vallées"],
+  menuires:["les-menuires","Les Menuires / Les 3 Vallées"], latania:["courchevel","Courchevel / Les 3 Vallées"], stmartin:["saint-martin-de-belleville","Saint Martin de Belleville / Les 3 Vallées"],
+  valdisere:["val-disere","Val d'Isère"], tignes:["tignes","Tignes"], lesarcs:["les-arcs-bourg-saint-maurice","Les Arcs / Paradiski"], laplagne:["la-plagne","La Plagne / Paradiski"],
+  peisey:["peisey-vallandry","Peisey Vallandry / Paradiski"], stefoy:["sainte-foy-tarentaise","Sainte Foy Tarentaise"], larosiere:["la-rosiere","La Rosière / Espace San Bernardo"],
+  chamonix:["chamonix-mont-blanc","Chamonix Mont-Blanc"], megeve:["megeve","Megève"], stgervais:["les-houches","Les Houches / Saint-Gervais"], contamines:["les-contamines-montjoie","Les Contamines - Montjoie"],
+  avoriaz:["avoriaz","Avoriaz / Portes du Soleil"], morzine:["morzine","Morzine / Portes du Soleil"], lesgets:["les-gets","Les Gets / Portes du Soleil"], chatel:["chatel","Châtel / Portes du Soleil"],
+  flaine:["flaine","Flaine / Le Grand Massif"], samoens:["samoens","Samoëns / Le Grand Massif"], alpedhuez:["alpe-dhuez-grand-domaine","Alpe d'Huez"], "2alpes":["les2alpes","Les 2 Alpes"],
+  montgenevre:["montgenevre","Montgenèvre / Via Lattea"], sestriere:["sestriere","Sestriere"], cervinia:["breuil-cervinia","Breuil-Cervinia"], courmayeur:["courmayeur","Courmayeur"],
+  lathuile:["la-rosiere","La Rosière / Espace San Bernardo"], pila:["pila-aostatal","Pila"], champoluc:["champoluc","Champoluc / Frachey"], zermatt:["zermatt","Zermatt"], verbier:["verbier","Verbier / 4 Vallées"],
+  crans:["crans-montana","Crans-Montana"], gstaad:["gstaad","Gstaad"], altabadia:["alta-badia","Alta Badia"], valgardena:["groeden-sankt-christina","Val Gardena"], arabba:["arabba","Arabba"],
+  kronplatz:["kronplatz","Kronplatz"], carezza:["carezza-karersee-rosengarten","Carezza"], livigno:["livigno","Livigno"], campiglio:["madonna-di-campiglio","Madonna di Campiglio"]
+};
+RESORTS.forEach(r => { r.count = Math.max(...r.v.map(x => x[2])); [r.x, r.y] = proj(r.lon, r.lat); });
+AIRPORTS.forEach(a => { [a.x, a.y] = proj(a.lon, a.lat); });
+const VT = RESORTS.find(r => r.id === "valthorens");
+VT.hasMap = true;
+const REGIONS = [
+  {id:"all", label:"All Alps"},
+  {id:"tarentaise", label:"Tarentaise", b:[6.42,45.26,7.05,45.66]},
+  {id:"montblanc", label:"Mont Blanc & Portes du Soleil", b:[6.55,45.78,6.98,46.30]},
+  {id:"aosta", label:"Aosta & Valais", b:[6.85,45.68,7.85,46.52]},
+  {id:"dolomites", label:"Dolomites", b:[11.5,46.33,12.25,46.85]},
+  {id:"south", label:"Southern Alps", b:[5.95,44.88,6.95,45.13]}
+];
+const MAJOR = new Set(["courchevel","valdisere","chamonix","zermatt","cervinia","cortina","altabadia","alpedhuez","verbier","livigno","avoriaz","valthorens"]);
+
+/* Val Thorens piste map: units are 10 m, origin at 6.50 E / 45.335 N */
+const COSLAT = Math.cos(45.295*Math.PI/180);
+const unitToLatLon = (x, y) => [(45.335 - y*10/110574).toFixed(5), (6.50 + x*10/(COSLAT*111320)).toFixed(5)];
+function parseLines(raw){ return raw.split("~").map(s => { const [c, name, pts] = s.split("|"); return {c, name, pts:(pts || "").split(" ").filter(Boolean).map(p => p.split(",").map(Number))}; }).filter(l => l.pts.length >= 2); }
+const RUNS = parseLines(PISTES_RAW), LIFTS = parseLines(LIFTS_RAW);
+const DIFF = {n:"Green", e:"Blue", i:"Red", a:"Black", f:"Itinerary (off-piste, unpatrolled)", u:"Unclassified"};
+const LIFTTYPE = {C:"Cable car", G:"Gondola", M:"Gondola + chairs", S:"Chairlift", D:"Drag lift", R:"Rope tow", K:"Magic carpet", F:"Funicular"};
+const PEAKS = [["Aiguille de Péclet",3561,971,593],["Cime de Caron",3195,477,794],["Mont de Gébroulaz",3511,1013,666],["Pointe de la Masse",2804,65,417],["Mont du Vallon",2952,845,63],["Mont du Chat",2832,149,791],["Aiguille du Bouchet",3254,862,845],["Aiguille de Polset",3528,1051,652],["Mont du Borgne",3153,889,341],["Roc du Soufre",2939,1080,356],["Aiguille des Saints-Pères",3369,897,652],["Pointe de Thorens",3262,858,774],["Pointe de Rosaël",3069,609,773],["Mont de Péclet",3012,742,258],["Pointe du Borgne",3078,827,373],["Pointe de la Lavanche",2706,463,870],["Roche Jaille",2689,66,708],["Le Petit Borgne",2466,729,99],["Le Teurre",2364,98,86]];
+const VILLAGE = [[607,382],[658,391],[677,409],[685,433],[680,440],[652,437],[649,417],[640,428],[595,427],[561,435],[543,415],[550,404],[578,397]];
+const VCENTRE = [612, 414];
+const MPOINTS = [
+  {id:"beginner_area", n:1, name:"Castor & Pollux beginner area", x:641, y:436, lift:"Castor Pollux magic carpet", who:"First-timers and children", quote:"I wait at the bottom of the magic carpet, by the beginner area sign. Look for the purple jacket."},
+  {id:"peclet_base", n:2, name:"Funitel Péclet base", x:594, y:437, lift:"Funitel Péclet", who:"Confident skiers heading to the glacier side", quote:"Meet me by the ticket office at the foot of the Funitel Péclet, 10 minutes before we start."},
+  {id:"caron_base", n:3, name:"Caron gondola base", x:505, y:450, lift:"Caron gondola", who:"Off-piste days and the Cime Caron", quote:"Bottom station of the Caron gondola. Bring your avalanche kit, I'll check it there."}
+];
+MPOINTS.forEach(m => { const d = Math.hypot(m.x - VCENTRE[0], m.y - VCENTRE[1]) * 10; m.walkM = Math.round(d / 10) * 10; m.walkMin = Math.max(2, Math.round(d / 70)); });
+
+/* ================= analytics ================= */
+window.dataLayer = window.dataLayer || [];
+const counts = {view:0, res:0, mp:0, search:0};
+let nEvents = 0;
+const logEl = document.getElementById("log");
+function track(event, params){
+  const payload = Object.assign({event}, params || {});
+  window.dataLayer.push(payload);
+  if (event === "explore_map_view") counts.view++;
+  if (event === "resort_select") counts.res++;
+  if (event === "meeting_point_select") counts.mp++;
+  if (event === "instructor_search") counts.search++;
+  document.getElementById("c-view").textContent = counts.view;
+  document.getElementById("c-res").textContent = counts.res;
+  document.getElementById("c-mp").textContent = counts.mp;
+  document.getElementById("c-search").textContent = counts.search;
+  nEvents++;
+  document.getElementById("log-n").textContent = nEvents + (nEvents === 1 ? " event" : " events");
+  const li = document.createElement("li");
+  li.className = "new";
+  const t = document.createElement("span"); t.className = "t"; t.textContent = new Date().toTimeString().slice(0,8);
+  const ev = document.createElement("span"); ev.className = "ev"; ev.textContent = event;
+  const pr = document.createElement("span"); pr.className = "pr";
+  pr.textContent = Object.entries(params || {}).map(([k,v]) => k + ": " + (typeof v === "string" ? '"' + v + '"' : v)).join("  ·  ") || "no parameters";
+  li.append(t, ev, pr);
+  logEl.prepend(li);
+  while (logEl.children.length > 60) logEl.lastChild.remove();
+}
+document.getElementById("log-clear").addEventListener("click", () => { logEl.innerHTML = ""; nEvents = 0; document.getElementById("log-n").textContent = "0 events"; });
+
+/* ================= reusable pan/zoom view ================= */
+const mapbox = document.getElementById("mapbox");
+const tip = document.getElementById("tip");
+function hideTip(){ tip.hidden = true; }
+function tipAt(clientX, clientY, html){
+  const mb = mapbox.getBoundingClientRect();
+  tip.innerHTML = html;
+  tip.style.left = (clientX - mb.left) + "px";
+  tip.style.top = (clientY - mb.top) + "px";
+  tip.hidden = false;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function createView(svg, W, opts){
+  const V = {svg, vb:{x:W.x0, y:W.y0, w:W.x1-W.x0, h:W.y1-W.y0}, baseW:W.x1-W.x0, anim:0, suppressClick:false, moved:false, atHome:true, lastAspect:0};
+  const WW = W.x1 - W.x0, WH = W.y1 - W.y0;
+  V.rect = () => svg.getBoundingClientRect();
+  V.aspect = () => { const r = V.rect(); return (r.width && r.height) ? r.height / r.width : 0.574; };
+  V.scale = () => V.vb.w / (V.rect().width || 1000);
+  V.zoom = () => V.baseW / V.vb.w;
+  V.clamp = v => {
+    const a = V.aspect();
+    v.w = Math.min(Math.max(v.w, opts.minW), WW); v.h = v.w * a;
+    if (v.h > WH && v.w > WH / a) { v.h = WH; v.w = WH / a; }
+    const cx = Math.min(Math.max(v.x + v.w/2, W.x0), W.x1), cy = Math.min(Math.max(v.y + v.h/2, W.y0), W.y1);
+    v.x = cx - v.w/2; v.y = cy - v.h/2; return v;
+  };
+  V.fit = (x0, y0, x1, y1, pad) => {
+    const a = V.aspect(); let w = (x1 - x0) * (pad || 1), h = (y1 - y0) * (pad || 1);
+    if (h / w > a) w = h / a; else h = w * a;
+    return V.clamp({x:(x0 + x1)/2 - w/2, y:(y0 + y1)/2 - h/2, w, h});
+  };
+  V.home = () => { const h = opts.home(V); V.baseW = h.w; return h; };
+  V.apply = () => { svg.setAttribute("viewBox", V.vb.x + " " + V.vb.y + " " + V.vb.w + " " + V.vb.h); if (V.rect().width) opts.onUpdate(V); };
+  V.animateTo = t => {
+    cancelAnimationFrame(V.anim);
+    if (reduced) { V.vb = t; V.apply(); return; }
+    const f = Object.assign({}, V.vb), t0 = performance.now(), D = 480;
+    const step = now => {
+      const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+      V.vb = {x:f.x + (t.x - f.x)*e, y:f.y + (t.y - f.y)*e, w:f.w + (t.w - f.w)*e, h:f.h + (t.h - f.h)*e};
+      V.apply();
+      if (k < 1) V.anim = requestAnimationFrame(step);
+    };
+    V.anim = requestAnimationFrame(step);
+  };
+  V.zoomAt = (cx, cy, factor, base) => {
+    const r = V.rect(), fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height;
+    const px = base.x + fx * base.w, py = base.y + fy * base.h, w = base.w * factor, h = base.h * factor;
+    return V.clamp({x:px - fx * w, y:py - fy * h, w, h});
+  };
+  V.zoomCenter = factor => { const r = V.rect(); return V.zoomAt(r.left + r.width/2, r.top + r.height/2, factor, V.vb); };
+  const pointers = new Map(); let drag = null, pinch = null, zoomTimer = 0, hintTimer = 0;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const logZoomSoon = method => { clearTimeout(zoomTimer); zoomTimer = setTimeout(() => opts.onZoom(method), 600); };
+  svg.addEventListener("pointerdown", e => {
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pointers.size === 1) { drag = {x:e.clientX, y:e.clientY, vb:Object.assign({}, V.vb)}; V.moved = false; }
+    else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = {d:dist(a, b), vb:Object.assign({}, V.vb), mx:(a.x + b.x)/2, my:(a.y + b.y)/2}; drag = null; }
+  });
+  window.addEventListener("pointermove", e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      cancelAnimationFrame(V.anim);
+      V.vb = V.zoomAt(pinch.mx, pinch.my, pinch.d / Math.max(dist(a, b), 1), pinch.vb);
+      V.moved = true; V.atHome = false; opts.onManual(); V.apply(); return;
+    }
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!V.moved && Math.abs(dx) + Math.abs(dy) > 5) { V.moved = true; svg.classList.add("dragging"); hideTip(); opts.onManual(); }
+      if (V.moved) {
+        const s0 = drag.vb.w / V.rect().width;
+        cancelAnimationFrame(V.anim);
+        V.vb = V.clamp({x:drag.vb.x - dx * s0, y:drag.vb.y - dy * s0, w:drag.vb.w, h:drag.vb.h});
+        V.atHome = false; V.apply();
+      }
+    }
+  });
+  const endPointer = e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pinch && pointers.size < 2) { pinch = null; drag = null; logZoomSoon("pinch"); }
+    if (pointers.size === 0) {
+      svg.classList.remove("dragging");
+      if (V.moved) { V.suppressClick = true; setTimeout(() => { V.suppressClick = false; }, 0); }
+      drag = null;
+    }
+  };
+  window.addEventListener("pointerup", endPointer);
+  window.addEventListener("pointercancel", endPointer);
+  svg.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) {
+      const h = document.getElementById("hint");
+      h.hidden = false; clearTimeout(hintTimer); hintTimer = setTimeout(() => { h.hidden = true; }, 1800);
+      return;
+    }
+    e.preventDefault(); cancelAnimationFrame(V.anim); opts.onManual(); V.atHome = false;
+    V.vb = V.zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0025), V.vb);
+    V.apply(); logZoomSoon("ctrl_scroll");
+  }, {passive:false});
+  svg.addEventListener("dblclick", e => {
+    e.preventDefault(); opts.onManual(); V.atHome = false;
+    const t = V.zoomAt(e.clientX, e.clientY, 0.5, V.vb);
+    V.animateTo(t); opts.onZoom("double_click", V.baseW / t.w);
+  });
+  new ResizeObserver(() => {
+    const r = V.rect(); if (!r.width) return;
+    const a = r.height / r.width;
+    if (Math.abs(a - V.lastAspect) < 0.001) { V.apply(); return; }
+    V.lastAspect = a;
+    if (V.atHome) V.vb = V.home();
+    else { const cx = V.vb.x + V.vb.w/2, cy = V.vb.y + V.vb.h/2; V.home(); V.vb = V.clamp({x:cx - V.vb.w/2, y:cy - V.vb.w*a/2, w:V.vb.w, h:V.vb.w*a}); }
+    V.apply();
+  }).observe(svg);
+  return V;
+}
+
+/* ================= Alps overview ================= */
+const svgA = document.getElementById("map");
+const gSea = document.getElementById("g-sea"), gLand = document.getElementById("g-land"), gAreas = document.getElementById("g-areas");
+const gCl = document.getElementById("g-clabels"), gAps = document.getElementById("g-aps"), gPins = document.getElementById("g-pins");
+el("rect", {x:-2000, y:-2000, width:5000, height:5000, class:"sea"}, gSea);
+MAPDATA.countries.forEach(c => el("path", {d:c.d, class:"land"}, gLand));
+el("path", {d:MAPDATA.borders, class:"border", "vector-effect":"non-scaling-stroke"}, gLand);
+const cLabelEls = [["FRANCE",5.75,46.55],["SWITZERLAND",7.95,46.95],["ITALY",9.6,45.25],["AUSTRIA",12.05,47.35],["GERMANY",10.6,47.62]].map(([t,lon,lat]) => { const [x,y] = proj(lon,lat); const e = el("text", {x, y, class:"clabel", "text-anchor":"middle"}, gCl); e.textContent = t; return e; });
+const apEls = AIRPORTS.map(a => { const g = el("g", {}, gAps); const m = el("rect", {class:"ap-mark", "vector-effect":"non-scaling-stroke"}, g); const t = el("text", {class:"ap-code"}, g); t.textContent = a.c; return {a, m, t}; });
+const areaEls = Object.keys(AREAS).map(k => { const members = RESORTS.filter(r => r.area === k); const p = el("path", {class:"area", "vector-effect":"non-scaling-stroke"}, gAreas); const t = el("text", {class:"alabel", "text-anchor":"middle"}, gAreas); t.textContent = AREAS[k]; return {members, p, t}; });
+
+let selected = null, mode = "alps", listQueued = false;
+[...RESORTS].sort((a,b) => b.count - a.count).forEach(r => {
+  const g = el("g", {class:"pin" + (r.hasMap ? " has-map" : ""), tabindex:"0", role:"button", "aria-label": r.name + ", " + r.count + " instructors" + (r.hasMap ? ", piste map available" : "")}, gPins);
+  r.ring = el("circle", {cx:r.x, cy:r.y, class:"pin-ring", "vector-effect":"non-scaling-stroke"}, g);
+  r.dot = el("circle", {cx:r.x, cy:r.y, class:"pin-dot", "vector-effect":"non-scaling-stroke"}, g);
+  r.badge = el("circle", {class:"pin-badge"}, g);
+  r.label = el("text", {class:"pin-label"}, g); r.label.textContent = r.name;
+  r.g = g;
+  g.addEventListener("click", () => { if (!AV.suppressClick) select(r, "map_pin"); });
+  g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(r, "map_pin"); } });
+  const show = () => { if (AV.moved && svgA.classList.contains("dragging")) return; const b = r.dot.getBoundingClientRect(); tipAt(b.left + b.width/2, b.top, "<b>" + esc(r.name) + "</b> · " + r.count + " instructors" + (r.hasMap ? " · piste map" : "")); };
+  g.addEventListener("pointerenter", show); g.addEventListener("focus", show);
+  g.addEventListener("pointerleave", hideTip); g.addEventListener("blur", hideTip);
+});
+function hull(pts){
+  pts.sort((a,b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o,a,b) => (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0]);
+  const lo = [], up = [];
+  for (const p of pts){ while (lo.length >= 2 && cr(lo[lo.length-2], lo[lo.length-1], p) <= 0) lo.pop(); lo.push(p); }
+  for (const p of pts.slice().reverse()){ while (up.length >= 2 && cr(up[up.length-2], up[up.length-1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0,-1).concat(up.slice(0,-1));
+}
+const overlaps = (box, placed) => placed.some(b => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]));
+function updateAlps(V){
+  const s = V.scale(), z = V.zoom(), vb = V.vb;
+  cLabelEls.forEach(e => { e.setAttribute("font-size", 15 * s); e.setAttribute("letter-spacing", 4 * s); e.style.display = z > 3.2 ? "none" : ""; });
+  apEls.forEach(({a, m, t}) => {
+    const d = 5 * s;
+    m.setAttribute("x", a.x - d/2); m.setAttribute("y", a.y - d/2); m.setAttribute("width", d); m.setAttribute("height", d);
+    m.setAttribute("transform", "rotate(45 " + a.x + " " + a.y + ")");
+    t.setAttribute("x", a.x + 7 * s); t.setAttribute("y", a.y + 4 * s); t.setAttribute("font-size", 11 * s);
+  });
+  areaEls.forEach(({members, p, t}) => {
+    if (z < 1.7 || members.length < 2) { p.style.display = "none"; t.style.display = "none"; return; }
+    const R = 16 * s, pts = [];
+    members.forEach(r => { for (let i = 0; i < 12; i++){ const a = i * Math.PI / 6; pts.push([r.x + R*Math.cos(a), r.y + R*Math.sin(a)]); } });
+    const h = hull(pts);
+    p.setAttribute("d", "M" + h.map(q => q[0].toFixed(2) + " " + q[1].toFixed(2)).join("L") + "Z"); p.setAttribute("stroke-width", 1.3);
+    let top = h[0]; h.forEach(q => { if (q[1] < top[1]) top = q; });
+    const cx = members.reduce((acc, r) => acc + r.x, 0) / members.length;
+    t.setAttribute("x", cx); t.setAttribute("y", top[1] - 5 * s); t.setAttribute("font-size", 12 * s); t.setAttribute("letter-spacing", 1 * s);
+    p.style.display = ""; t.style.display = z >= 2.4 ? "" : "none";
+  });
+  const placed = [];
+  [...RESORTS].sort((a,b) => (b === selected) - (a === selected) || b.count - a.count).forEach(r => {
+    const rp = 3 + Math.sqrt(r.count) * 0.8;
+    r.dot.setAttribute("r", rp * s); r.dot.setAttribute("stroke-width", 1.5);
+    r.ring.setAttribute("r", (rp + 4) * s); r.ring.setAttribute("stroke-width", 2);
+    if (r.hasMap) { r.badge.setAttribute("cx", r.x + rp * 0.75 * s); r.badge.setAttribute("cy", r.y - rp * 0.75 * s); r.badge.setAttribute("r", 3.2 * s); }
+    const fs = 12.5 * s, lx = r.x + (rp + 4) * s, ly = r.y + 4.2 * s;
+    const box = [lx, ly - fs, lx + r.name.length * 6.6 * s, ly + 3 * s];
+    let show = r === selected || z >= 2.2 || MAJOR.has(r.id);
+    if (show && r !== selected) {
+      if (box[0] > vb.x + vb.w || box[2] < vb.x || box[1] > vb.y + vb.h || box[3] < vb.y) show = false;
+      else show = !overlaps(box, placed);
+    }
+    r.label.style.display = show ? "" : "none";
+    if (show) { placed.push(box); r.label.setAttribute("x", lx); r.label.setAttribute("y", ly); r.label.setAttribute("font-size", fs); r.label.setAttribute("stroke-width", 3 * s); }
+  });
+  if (!listQueued) { listQueued = true; requestAnimationFrame(() => { listQueued = false; renderList(); }); }
+}
+const regBtns = [];
+function clearRegion(){ regBtns.forEach(x => x.setAttribute("aria-pressed", "false")); }
+const AV = createView(svgA, {x0:0, y0:0, x1:1000, y1:574}, {
+  minW:45,
+  home: V => { const a = V.aspect(); let w = 1000, h = 1000 * a; if (h > 574) { h = 574; w = 574 / a; } return {x:(1000 - w)/2, y:(574 - h)/2, w, h}; },
+  onUpdate: updateAlps,
+  onManual: clearRegion,
+  onZoom: (method, z) => track("map_zoom", {map:"alps", method, zoom:+(z || AV.zoom()).toFixed(1)})
+});
+function regionView(reg){
+  if (!reg.b) { AV.atHome = true; return AV.home(); }
+  AV.atHome = false;
+  const [x0, y1] = proj(reg.b[0], reg.b[1]), [x1, y0] = proj(reg.b[2], reg.b[3]);
+  return AV.fit(x0, y0, x1, y1, 1.05);
+}
+const regBar = document.getElementById("regions");
+REGIONS.forEach(reg => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chipbtn"; b.textContent = reg.label;
+  b.setAttribute("aria-pressed", reg.id === "all" ? "true" : "false");
+  b.addEventListener("click", () => {
+    regBtns.forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    AV.animateTo(regionView(reg));
+    track("map_zoom", {map:"alps", method:"region_button", region:reg.id});
+  });
+  regBar.appendChild(b); regBtns.push(b);
+});
+const rlist = document.getElementById("rlist"), more = document.getElementById("more");
+function renderList(){
+  const vb = AV.vb;
+  const inView = RESORTS.filter(r => r.x >= vb.x && r.x <= vb.x + vb.w && r.y >= vb.y && r.y <= vb.y + vb.h).sort((a,b) => b.count - a.count);
+  document.getElementById("iv-title").textContent = AV.zoom() < 1.15 ? "Busiest resorts" : "Resorts in this view";
+  rlist.innerHTML = "";
+  inView.slice(0, 12).forEach(r => {
+    const li = document.createElement("li"), b = document.createElement("button");
+    b.type = "button";
+    if (r === selected) b.setAttribute("aria-current", "true");
+    const n1 = document.createElement("span"); n1.textContent = r.name + (r.hasMap ? " · piste map" : "");
+    const n2 = document.createElement("span"); n2.className = "n"; n2.textContent = r.count;
+    b.append(n1, n2);
+    b.addEventListener("click", () => select(r, "list"));
+    li.appendChild(b); rlist.appendChild(li);
+  });
+  if (inView.length > 12) { more.hidden = false; more.textContent = (inView.length - 12) + " more in view. Zoom in or pick a region to see them."; }
+  else more.hidden = true;
+}
+
+/* ================= Val Thorens piste map ================= */
+const svgP = document.getElementById("pmap");
+const gPbg = document.getElementById("p-bg"), gCase = document.getElementById("p-case"), gRuns = document.getElementById("p-runs");
+const gLifts = document.getElementById("p-lifts"), gPeaks = document.getElementById("p-peaks"), gPl = document.getElementById("p-labels"), gMps = document.getElementById("p-mps");
+const ptsD = pts => "M" + pts.map(p => p[0] + " " + p[1]).join("L");
+el("rect", {x:-400, y:-500, width:1800, height:1900, class:"snowbg"}, gPbg);
+el("path", {d:ptsD(VILLAGE) + "Z", class:"village", "vector-effect":"non-scaling-stroke"}, gPbg);
+let hlRun = null;
+RUNS.forEach(run => {
+  const d = ptsD(run.pts);
+  const cs = el("path", {d, class:"run-case", "vector-effect":"non-scaling-stroke"}, gCase);
+  const p = el("path", {d, class:"run " + run.c, "vector-effect":"non-scaling-stroke"}, gRuns);
+  const label = "<b>" + esc(run.name || "Unnamed run") + "</b> · " + DIFF[run.c];
+  cs.addEventListener("pointerenter", e => { if (PV.moved && svgP.classList.contains("dragging")) return; if (hlRun) hlRun.classList.remove("hl"); hlRun = p; p.classList.add("hl"); tipAt(e.clientX, e.clientY, label); });
+  cs.addEventListener("pointermove", e => { if (!tip.hidden) tipAt(e.clientX, e.clientY, label); });
+  cs.addEventListener("pointerleave", () => { p.classList.remove("hl"); hideTip(); });
+  cs.addEventListener("click", e => { if (PV.suppressClick) return; tipAt(e.clientX, e.clientY, label); });
+});
+const liftEls = LIFTS.map(l => {
+  const d = ptsD(l.pts);
+  el("path", {d, class:"lift", "vector-effect":"non-scaling-stroke"}, gLifts);
+  const a = el("circle", {cx:l.pts[0][0], cy:l.pts[0][1], class:"lift-end"}, gLifts);
+  const last = l.pts[l.pts.length - 1];
+  const b = el("circle", {cx:last[0], cy:last[1], class:"lift-end"}, gLifts);
+  const hit = el("path", {d, class:"lift-hit", "vector-effect":"non-scaling-stroke"}, gLifts);
+  const label = "<b>" + esc(l.name || "Unnamed lift") + "</b> · " + (LIFTTYPE[l.c] || "Lift");
+  hit.addEventListener("pointerenter", e => { if (PV.moved && svgP.classList.contains("dragging")) return; tipAt(e.clientX, e.clientY, label); });
+  hit.addEventListener("pointermove", e => { if (!tip.hidden) tipAt(e.clientX, e.clientY, label); });
+  hit.addEventListener("pointerleave", hideTip);
+  hit.addEventListener("click", e => { if (PV.suppressClick) return; tipAt(e.clientX, e.clientY, label); });
+  const mid = l.pts[Math.floor((l.pts.length - 1) / 2)], mid2 = l.pts[Math.ceil((l.pts.length - 1) / 2)];
+  const mx = (mid[0] + (l.pts.length === 2 ? last[0] : mid2[0])) / 2, my = (mid[1] + (l.pts.length === 2 ? last[1] : mid2[1])) / 2;
+  let t = null;
+  if (l.name && l.c !== "K") { t = el("text", {class:"lift-label"}, gPl); t.textContent = l.name; }
+  return {l, a, b, t, mx, my, len:Math.hypot(last[0] - l.pts[0][0], last[1] - l.pts[0][1])};
+});
+const peakEls = PEAKS.map(([name, ele, x, y]) => {
+  const tri = el("path", {class:"peak"}, gPeaks);
+  const t = el("text", {class:"plabel"}, gPeaks); t.textContent = name + " · " + ele + " m";
+  return {name, ele, x, y, tri, t};
+});
+const vLabel = el("text", {class:"vlabel", "text-anchor":"middle"}, gPl); vLabel.textContent = "VAL THORENS · 2300 m";
+const menDot = el("circle", {cx:297, cy:133, class:"vdot"}, gPl);
+const menLabel = el("text", {class:"vlabel2"}, gPl); menLabel.textContent = "Les Menuires · 1850 m";
+const orelleLabel = el("text", {class:"vlabel2", "text-anchor":"middle"}, gPl); orelleLabel.textContent = "↓ Orelle, Maurienne valley";
+let selMP = null;
+MPOINTS.forEach(m => {
+  const g = el("g", {class:"mp", tabindex:"0", role:"button", "aria-label":"Example meeting point " + m.n + ": " + m.name}, gMps);
+  m.c = el("circle", {cx:m.x, cy:m.y, class:"mpc", "vector-effect":"non-scaling-stroke"}, g);
+  m.num = el("text", {class:"mpn"}, g); m.num.textContent = m.n;
+  m.lab = el("text", {class:"mpl"}, g); m.lab.textContent = m.name;
+  m.g = g;
+  g.addEventListener("click", () => { if (!PV.suppressClick) selectMP(m, "map_pin"); });
+  g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectMP(m, "map_pin"); } });
+});
+function updatePiste(V){
+  const s = V.scale(), z = V.zoom(), vb = V.vb;
+  const placed = [];
+  const inView = (x, y) => x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h;
+  MPOINTS.forEach(m => {
+    const r = 9 * s;
+    m.c.setAttribute("r", r); m.c.setAttribute("stroke-width", m === selMP ? 3 : 2);
+    m.num.setAttribute("x", m.x); m.num.setAttribute("y", m.y + 3.6 * s); m.num.setAttribute("font-size", 10.5 * s);
+    const fs = 12.5 * s, lx = m.x + r + 4 * s, ly = m.y + 4.2 * s;
+    const box = [lx, ly - fs, lx + m.name.length * 6.5 * s, ly + 3 * s];
+    const show = true;
+    m.lab.style.display = show && !overlaps(box, placed) ? "" : "none";
+    if (m.lab.style.display === "") placed.push(box);
+    m.lab.setAttribute("x", lx); m.lab.setAttribute("y", ly); m.lab.setAttribute("font-size", fs); m.lab.setAttribute("stroke-width", 3.5 * s);
+    placed.push([m.x - r, m.y - r, m.x + r, m.y + r]);
+  });
+  const vfs = 14 * s;
+  vLabel.setAttribute("x", 614); vLabel.setAttribute("y", 372); vLabel.setAttribute("font-size", vfs); vLabel.setAttribute("stroke-width", 4 * s); vLabel.setAttribute("letter-spacing", 1 * s);
+  placed.push([614 - 10 * vfs * 0.62, 372 - vfs, 614 + 10 * vfs * 0.62, 372 + 3 * s]);
+  menDot.setAttribute("r", 4 * s);
+  menLabel.setAttribute("x", 297 + 7 * s); menLabel.setAttribute("y", 133 + 4 * s); menLabel.setAttribute("font-size", 13 * s); menLabel.setAttribute("stroke-width", 3.5 * s);
+  orelleLabel.setAttribute("x", 520); orelleLabel.setAttribute("y", 990); orelleLabel.setAttribute("font-size", 13 * s); orelleLabel.setAttribute("stroke-width", 3.5 * s);
+  peakEls.forEach(p => {
+    const h = 7 * s;
+    p.tri.setAttribute("d", "M" + p.x + " " + (p.y - h) + "L" + (p.x + h * 0.8) + " " + (p.y + h * 0.4) + "L" + (p.x - h * 0.8) + " " + (p.y + h * 0.4) + "Z");
+    const fs = 11 * s, lx = p.x + 7 * s, ly = p.y + 4 * s;
+    const box = [lx, ly - fs, lx + (p.name.length + 9) * 5.8 * s, ly + 3 * s];
+    const show = inView(p.x, p.y) && !overlaps(box, placed);
+    p.t.style.display = show ? "" : "none";
+    if (show) { placed.push(box); p.t.setAttribute("x", lx); p.t.setAttribute("y", ly); p.t.setAttribute("font-size", fs); p.t.setAttribute("stroke-width", 3 * s); }
+  });
+  [...liftEls].sort((a, b) => b.len - a.len).forEach(L => {
+    L.a.setAttribute("r", 2.6 * s); L.b.setAttribute("r", 2.6 * s);
+    if (!L.t) return;
+    const fs = 10.5 * s, lx = L.mx + 5 * s, ly = L.my + 3.5 * s;
+    const box = [lx, ly - fs, lx + L.l.name.length * 6.4 * s, ly + 3 * s];
+    const show = z >= 1.25 && inView(L.mx, L.my) && !overlaps(box, placed);
+    L.t.style.display = show ? "" : "none";
+    if (show) { placed.push(box); L.t.setAttribute("x", lx); L.t.setAttribute("y", ly); L.t.setAttribute("font-size", fs); L.t.setAttribute("stroke-width", 3 * s); }
+  });
+}
+const PV = createView(svgP, {x0:-60, y0:-170, x1:1000, y1:1000}, {
+  minW:110,
+  home: V => V.fit(400, 330, 910, 900, 1.02),
+  onUpdate: updatePiste,
+  onManual: () => {},
+  onZoom: (method, z) => track("map_zoom", {map:"val_thorens", method, zoom:+(z || PV.zoom()).toFixed(1)})
+});
+const FILTERS = [["all","All runs"],["beginner","Green & blue"],["advanced","Red, black & off-piste"]];
+const filterBar = document.getElementById("filters");
+const filterBtns = FILTERS.map(([id, label]) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chipbtn"; b.textContent = label; b.setAttribute("aria-pressed", id === "all" ? "true" : "false");
+  b.addEventListener("click", () => {
+    filterBtns.forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    svgP.dataset.filter = id;
+    if (G3) G3.setFilter(id);
+    track("piste_filter", {resort:"val-thorens", filter:id});
+  });
+  filterBar.appendChild(b); return b;
+});
+
+/* ================= 3D mountain ================= */
+const EG = {X0:-60, Y0:-165, STEP:15, COLS:72, ROWS:79};
+const ELE = (() => {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", ix = {};
+  for (let i = 0; i < 64; i++) ix[A[i]] = i;
+  const out = new Float32Array(EG.COLS * EG.ROWS);
+  for (let i = 0; i < out.length; i++) out[i] = ix[ELE_RAW[2*i]] * 64 + ix[ELE_RAW[2*i+1]];
+  return out;
+})();
+function eleAt(x, y){
+  let gx = (x - EG.X0) / EG.STEP, gy = (y - EG.Y0) / EG.STEP;
+  gx = Math.min(Math.max(gx, 0), EG.COLS - 1.0001); gy = Math.min(Math.max(gy, 0), EG.ROWS - 1.0001);
+  const ix = Math.floor(gx), iy = Math.floor(gy), fx = gx - ix, fy = gy - iy;
+  const g = (c, r) => ELE[Math.min(Math.max(r, 0), EG.ROWS - 1) * EG.COLS + Math.min(Math.max(c, 0), EG.COLS - 1)];
+  const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2*p0 - 5*p1 + 4*p2 - p3 + t * (3*(p1 - p2) + p3 - p0)));
+  const r = [-1, 0, 1, 2].map(d => cr(g(ix-1, iy+d), g(ix, iy+d), g(ix+1, iy+d), g(ix+2, iy+d), fx));
+  return cr(r[0], r[1], r[2], r[3], fy);
+}
+const EXAG = 1.15, BASE_ELE = 1400;
+const hAt = (x, y) => (eleAt(x, y) - BASE_ELE) / 10 * EXAG;
+const XS = EG.X0, XE = EG.X0 + (EG.COLS - 1) * EG.STEP, ZS = EG.Y0, ZE = EG.Y0 + (EG.ROWS - 1) * EG.STEP;
+const SEGS = [];
+RUNS.forEach(r => { for (let i = 1; i < r.pts.length; i++) SEGS.push({a:r.pts[i-1], b:r.pts[i], label:"<b>" + esc(r.name || "Unnamed run") + "</b> · " + DIFF[r.c]}); });
+LIFTS.forEach(l => { for (let i = 1; i < l.pts.length; i++) SEGS.push({a:l.pts[i-1], b:l.pts[i], label:"<b>" + esc(l.name || "Unnamed lift") + "</b> · " + (LIFTTYPE[l.c] || "Lift")}); });
+function nearestSeg(x, y, thr){
+  let best = null, bd = thr * thr;
+  for (const s of SEGS) {
+    const dx = s.b[0] - s.a[0], dy = s.b[1] - s.a[1], L = dx*dx + dy*dy;
+    let t = L ? ((x - s.a[0]) * dx + (y - s.a[1]) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+    const ex = s.a[0] + t * dx - x, ey = s.a[1] + t * dy - y, d = ex*ex + ey*ey;
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+let G3 = null, view = "3d";
+function build3D(){
+  const T = window.THREE;
+  if (!T || !T.OrbitControls) return null;
+  let renderer;
+  try { renderer = new T.WebGLRenderer({antialias:true, alpha:true}); } catch (e) { return null; }
+  if (!renderer.getContext()) return null;
+  const host = document.getElementById("p3d"), lhost = document.getElementById("l3d");
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = T.sRGBEncoding;
+  renderer.setClearColor(0x000000, 0);
+  host.insertBefore(renderer.domElement, lhost);
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(38, 1.6, 5, 8000);
+  const controls = new T.OrbitControls(camera, renderer.domElement);
+  Object.assign(controls, {enableDamping:true, dampingFactor:0.08, maxPolarAngle:1.36, minDistance:110, maxDistance:2600, rotateSpeed:0.6, zoomSpeed:0.8, screenSpacePanning:false});
+  const scss = getComputedStyle(document.documentElement);
+  const accent = new T.Color((scss.getPropertyValue("--scene-accent") || "#5A3CC8").trim());
+
+  /* terrain */
+  const SUB = 2, NX = (EG.COLS - 1) * SUB + 1, NZ = (EG.ROWS - 1) * SUB + 1;
+  const pos = new Float32Array(NX * NZ * 3), uv = new Float32Array(NX * NZ * 2), idx = [];
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    const x = XS + (XE - XS) * i / (NX - 1), z = ZS + (ZE - ZS) * j / (NZ - 1), k = j * NX + i;
+    pos[3*k] = x; pos[3*k+1] = hAt(x, z); pos[3*k+2] = z; uv[2*k] = i / (NX - 1); uv[2*k+1] = 1 - j / (NZ - 1);
+  }
+  for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const geo = new T.BufferGeometry();
+  geo.setAttribute("position", new T.BufferAttribute(pos, 3)); geo.setAttribute("uv", new T.BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+  const S = 2048, cvs = document.createElement("canvas"); cvs.width = cvs.height = S;
+  const tex = new T.CanvasTexture(cvs); tex.encoding = T.sRGBEncoding; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const terrain = new T.Mesh(geo, new T.MeshLambertMaterial({map:tex}));
+  scene.add(terrain);
+
+  /* base colour: snow, rock on steep faces, a little green-grey low down */
+  const small = document.createElement("canvas"); small.width = EG.COLS; small.height = EG.ROWS;
+  const sctx = small.getContext("2d"), im = sctx.createImageData(EG.COLS, EG.ROWS);
+  const E = (c, r) => ELE[Math.min(Math.max(r, 0), EG.ROWS - 1) * EG.COLS + Math.min(Math.max(c, 0), EG.COLS - 1)];
+  for (let r = 0; r < EG.ROWS; r++) for (let c = 0; c < EG.COLS; c++) {
+    const dzx = (E(c+1, r) - E(c-1, r)) / 300, dzy = (E(c, r+1) - E(c, r-1)) / 300;
+    const slope = Math.atan(Math.hypot(dzx, dzy)) * 180 / Math.PI;
+    const rock = Math.min(1, Math.max(0, (slope - 30) / 16)), low = Math.min(1, Math.max(0, (2050 - E(c, r)) / 300)) * 0.45;
+    const snow = [244, 247, 250], rk = [138, 130, 122], fo = [126, 140, 122];
+    const k = (r * EG.COLS + c) * 4;
+    for (let ch = 0; ch < 3; ch++) im.data[k+ch] = Math.round((snow[ch] * (1 - rock) + rk[ch] * rock) * (1 - low) + fo[ch] * low);
+    im.data[k+3] = 255;
+  }
+  sctx.putImageData(im, 0, 0);
+  const PIST = {n:"#2E9E5B", e:"#2563C9", i:"#D3302B", a:"#1B1F24", f:"#1B1F24", u:"#7D8794"};
+  const toC = (x, y) => [(x - XS) / (XE - XS) * S, (y - ZS) / (ZE - ZS) * S];
+  function drawTex(filter){
+    const ctx = cvs.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(small, 0, 0, S, S);
+    ctx.beginPath(); VILLAGE.forEach((p, i) => { const [cx, cy] = toC(p[0], p[1]); i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy); }); ctx.closePath();
+    ctx.fillStyle = "#D8CFC2"; ctx.fill();
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    const dim = r => (filter === "beginner" && "iaf".includes(r.c)) || (filter === "advanced" && "neu".includes(r.c));
+    const trace = r => { ctx.beginPath(); r.pts.forEach((p, i) => { const [cx, cy] = toC(p[0], p[1]); i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy); }); };
+    ctx.setLineDash([]); ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 10;
+    RUNS.forEach(r => { if (!dim(r)) { trace(r); ctx.stroke(); } });
+    ["u","n","e","i","a","f"].forEach(code => RUNS.filter(r => r.c === code).forEach(r => {
+      ctx.globalAlpha = dim(r) ? 0.16 : 1; ctx.strokeStyle = PIST[code]; ctx.lineWidth = 5;
+      ctx.setLineDash(code === "f" ? [14, 10] : []); trace(r); ctx.stroke();
+    }));
+    ctx.globalAlpha = 1; ctx.setLineDash([]);
+    tex.needsUpdate = true;
+  }
+  drawTex("all");
+
+  /* skirt: turns the terrain into a block, like a relief model */
+  const SKB = -24, wall = [];
+  const edge = [];
+  for (let i = 0; i < NX; i++) edge.push(i);
+  for (let j = 1; j < NZ; j++) edge.push(j * NX + NX - 1);
+  for (let i = NX - 2; i >= 0; i--) edge.push((NZ - 1) * NX + i);
+  for (let j = NZ - 2; j >= 0; j--) edge.push(j * NX);
+  for (let e = 0; e < edge.length - 1; e++) {
+    const a = edge[e], b = edge[e+1];
+    const ax = pos[3*a], ay = pos[3*a+1], az = pos[3*a+2], bx = pos[3*b], by = pos[3*b+1], bz = pos[3*b+2];
+    wall.push(ax, ay, az, ax, SKB, az, bx, by, bz, bx, by, bz, ax, SKB, az, bx, SKB, bz);
+  }
+  const wg = new T.BufferGeometry(); wg.setAttribute("position", new T.Float32BufferAttribute(wall, 3)); wg.computeVertexNormals();
+  scene.add(new T.Mesh(wg, new T.MeshLambertMaterial({color:0xA99D8E, side:T.DoubleSide})));
+
+  /* light from the south-west, plus sky fill */
+  scene.add(new T.HemisphereLight(0xffffff, 0x8a96a8, 0.62));
+  const sun = new T.DirectionalLight(0xffffff, 0.78); sun.position.set(-500, 700, 800); scene.add(sun);
+
+  /* lifts: cables between stations, drag lifts and carpets on the snow */
+  const liftMat = new T.LineBasicMaterial({color:0x1B2433});
+  const stGeo = new T.BoxGeometry(5, 4, 5), stMat = new T.MeshLambertMaterial({color:0x2E3646});
+  LIFTS.forEach(l => {
+    const aerial = "CGSMF".includes(l.c), pts = [];
+    if (aerial) {
+      const a = l.pts[0], b = l.pts[l.pts.length - 1], ha = hAt(a[0], a[1]) + 3, hb = hAt(b[0], b[1]) + 3;
+      for (let k = 0; k <= 28; k++) { const t = k / 28, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t; pts.push(new T.Vector3(x, Math.max(ha + (hb - ha) * t, hAt(x, y) + 2.5), y)); }
+      [a, b].forEach(p => { const m = new T.Mesh(stGeo, stMat); m.position.set(p[0], hAt(p[0], p[1]) + 2, p[1]); scene.add(m); });
+    } else {
+      l.pts.forEach((p, i) => {
+        if (!i) { pts.push(new T.Vector3(p[0], hAt(p[0], p[1]) + 1.3, p[1])); return; }
+        const q = l.pts[i-1];
+        for (let k = 1; k <= 6; k++) { const t = k / 6, x = q[0] + (p[0] - q[0]) * t, y = q[1] + (p[1] - q[1]) * t; pts.push(new T.Vector3(x, hAt(x, y) + 1.3, y)); }
+      });
+    }
+    scene.add(new T.Line(new T.BufferGeometry().setFromPoints(pts), liftMat));
+  });
+
+  /* meeting points: a pole and a ball, with a clickable label */
+  const mpMat = new T.MeshLambertMaterial({color:accent}), poleGeo = new T.CylinderGeometry(0.9, 0.9, 22, 8), ballGeo = new T.SphereGeometry(4.6, 20, 14);
+  const labels = [];
+  MPOINTS.forEach(m => {
+    const h = hAt(m.x, m.y);
+    const pole = new T.Mesh(poleGeo, mpMat); pole.position.set(m.x, h + 11, m.y); scene.add(pole);
+    const ball = new T.Mesh(ballGeo, mpMat); ball.position.set(m.x, h + 24, m.y); scene.add(ball);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "l3d mpb"; b.dataset.mp = m.id;
+    b.innerHTML = "<i>" + m.n + "</i><span></span>"; b.querySelector("span").textContent = m.name;
+    b.addEventListener("click", () => selectMP(m, "map_pin"));
+    lhost.appendChild(b);
+    labels.push({el:b, p:new T.Vector3(m.x, h + 30, m.y), pri:3, dx:-14, dy:-28, mp:m});
+  });
+  PEAKS.filter(p => p[2] > XS && p[2] < XE && p[3] > ZS && p[3] < ZE).forEach(([name, ele, x, y]) => {
+    const d = document.createElement("div"); d.className = "l3d pk";
+    d.innerHTML = "<span></span> <small>" + ele + " m</small>"; d.querySelector("span").textContent = "▲ " + name;
+    lhost.appendChild(d);
+    labels.push({el:d, p:new T.Vector3(x, hAt(x, y) + 6, y), pri:1 + ele / 10000, dx:-6, dy:-18});
+  });
+  [["Val Thorens · 2300 m", 614, 405, 2], ["Les Menuires", 297, 133, 1.5]].forEach(([txt, x, y, pri]) => {
+    const d = document.createElement("div"); d.className = "l3d vil"; d.textContent = txt; lhost.appendChild(d);
+    labels.push({el:d, p:new T.Vector3(x, hAt(x, y) + 14, y), pri, dx:0, dy:8, center:true});
+  });
+  labels.sort((a, b) => b.pri - a.pri);
+
+  /* camera moves */
+  const HOME_T = new T.Vector3(630, hAt(630, 560), 560), HOME_P = HOME_T.clone().add(new T.Vector3(-90, 540, -760));
+  let fly = null;
+  function flyTo(target, position, ms){
+    if (reduced) { controls.target.copy(target); camera.position.copy(position); controls.update(); return; }
+    fly = {t0:performance.now(), ms:ms || 900, ft:controls.target.clone(), fp:camera.position.clone(), tt:target.clone(), tp:position.clone()};
+  }
+  function home(){ fly = null; controls.target.copy(HOME_T); camera.position.copy(HOME_P); controls.update(); }
+  function focusMP(m){
+    const t = new T.Vector3(m.x, hAt(m.x, m.y) + 8, m.y);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    if (dir.y < 0.45) { dir.y = 0.45; dir.normalize(); }
+    flyTo(t, t.clone().add(dir.multiplyScalar(300)));
+  }
+  function dolly(f){
+    const t = controls.target.clone(), off = camera.position.clone().sub(t);
+    const len = Math.min(Math.max(off.length() * f, controls.minDistance), controls.maxDistance);
+    flyTo(t, t.clone().add(off.setLength(len)), 380);
+  }
+
+  /* hover and tap: find the run or lift under the pointer */
+  const ray = new T.Raycaster(), ndc = new T.Vector2();
+  let hover = null, down = null, interacting = false, orbitTimer = 0;
+  const pick = (cx, cy) => {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObject(terrain)[0];
+    if (!hit) return null;
+    return nearestSeg(hit.point.x, hit.point.z, Math.max(4, hit.distance / 110));
+  };
+  renderer.domElement.addEventListener("pointermove", e => { if (!interacting && e.pointerType === "mouse") hover = {x:e.clientX, y:e.clientY}; });
+  renderer.domElement.addEventListener("pointerleave", () => { hover = null; hideTip(); });
+  renderer.domElement.addEventListener("pointerdown", e => { down = {x:e.clientX, y:e.clientY}; hideTip(); });
+  renderer.domElement.addEventListener("pointerup", e => {
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) { const s = pick(e.clientX, e.clientY); if (s) tipAt(e.clientX, e.clientY, s.label); else hideTip(); }
+    down = null;
+  });
+  host.addEventListener("wheel", e => {
+    if (e.ctrlKey || e.metaKey) return;
+    e.stopPropagation();
+    const h = document.getElementById("hint"); h.hidden = false; clearTimeout(host._ht); host._ht = setTimeout(() => { h.hidden = true; }, 1800);
+  }, {capture:true});
+  controls.addEventListener("start", () => { interacting = true; fly = null; hideTip(); });
+  controls.addEventListener("end", () => {
+    interacting = false;
+    clearTimeout(orbitTimer);
+    orbitTimer = setTimeout(() => track("map_3d_orbit", {resort:"val-thorens", distance_km:+(camera.position.distanceTo(controls.target) / 100).toFixed(1)}), 900);
+  });
+
+  /* sizing and the render loop */
+  let W = 0, H = 0, running = false;
+  function size(){
+    const r = host.getBoundingClientRect(); if (!r.width) return;
+    if (r.width === W && r.height === H) return;
+    W = r.width; H = r.height; renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(size).observe(host);
+  const v = new T.Vector3();
+  function placeLabels(){
+    const placed = [];
+    for (const L of labels) {
+      v.copy(L.p).project(camera);
+      const vis = v.z < 1 && v.x > -1.05 && v.x < 1.05 && v.y > -1.05 && v.y < 1.1;
+      if (!vis) { L.el.style.display = "none"; continue; }
+      L.el.style.display = "";
+      const ax = (v.x + 1) / 2 * W + L.dx, ay = (1 - v.y) / 2 * H + L.dy;
+      if (L.mp) {
+        const sel = L.mp === selMP;
+        L.el.setAttribute("aria-current", sel ? "true" : "false");
+        L.el.classList.remove("compact");
+        let w = L.el.offsetWidth, h = L.el.offsetHeight, y = ay, box = [ax, y, ax + w, y + h];
+        if (!sel && overlaps(box, placed)) {
+          L.el.classList.add("compact");
+          w = L.el.offsetWidth; box = [ax, y, ax + w, y + h];
+          for (let k = 0; k < 3 && overlaps(box, placed); k++) { y -= h + 4; box = [ax, y, ax + w, y + h]; }
+        }
+        placed.push(box);
+        L.el.style.transform = "translate(" + Math.round(ax) + "px," + Math.round(y) + "px)";
+        continue;
+      }
+      const w = L.w || (L.w = L.el.offsetWidth), h = L.h || (L.h = L.el.offsetHeight);
+      let x = ax, y = ay;
+      if (L.center) x -= w / 2;
+      const box = [x, y, x + w, y + h];
+      if (x < 2 || y < 2 || x + w > W - 50 || y + h > H - 2 || overlaps(box, placed)) { L.el.style.display = "none"; continue; }
+      placed.push(box);
+      L.el.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+    }
+  }
+  function frame(now){
+    if (!running) return;
+    size();
+    if (fly) {
+      const k = Math.min(1, (now - fly.t0) / fly.ms), e = 1 - Math.pow(1 - k, 3);
+      controls.target.lerpVectors(fly.ft, fly.tt, e); camera.position.lerpVectors(fly.fp, fly.tp, e);
+      if (k >= 1) fly = null;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    placeLabels();
+    if (hover && !interacting) { const s = pick(hover.x, hover.y); if (s) tipAt(hover.x, hover.y, s.label); else hideTip(); hover = null; }
+    requestAnimationFrame(frame);
+  }
+  return {
+    start(){ if (running) return; running = true; size(); requestAnimationFrame(frame); },
+    stop(){ running = false; },
+    home, focusMP, dolly,
+    setFilter: drawTex
+  };
+}
+function ensure3D(){
+  if (G3) return true;
+  if (G3 === false) return false;
+  const g = build3D();
+  document.getElementById("loading3d").hidden = true;
+  if (!g) { G3 = false; document.getElementById("v3d").disabled = true; document.getElementById("v3d").title = "3D isn't available in this browser"; return false; }
+  G3 = g; G3.setFilter(svgP.dataset.filter || "all");
+  return true;
+}
+function setView(v, source){
+  if (v === "3d" && !ensure3D()) { v = "2d"; document.getElementById("nogl").hidden = false; }
+  view = v; layout.dataset.view = v; hideTip();
+  document.getElementById("v3d").setAttribute("aria-pressed", v === "3d" ? "true" : "false");
+  document.getElementById("v2d").setAttribute("aria-pressed", v === "2d" ? "true" : "false");
+  if (v === "3d" && mode === "piste") G3.start(); else if (G3) G3.stop();
+  if (v === "2d" && mode === "piste") requestAnimationFrame(() => { PV.lastAspect = PV.aspect(); if (PV.atHome) PV.vb = PV.home(); PV.apply(); });
+  if (source) track("map_view_toggle", {resort:"val-thorens", view:v});
+}
+document.getElementById("v3d").addEventListener("click", () => { if (view !== "3d") setView("3d", "button"); });
+document.getElementById("v2d").addEventListener("click", () => { if (view !== "2d") setView("2d", "button"); });
+
+/* ================= mode switching ================= */
+const layout = document.getElementById("layout");
+function activeView(){ return mode === "piste" ? PV : AV; }
+function zoomBtn(f){
+  if (mode === "piste" && view === "3d" && G3) { G3.dolly(f); track("map_zoom", {map:"val_thorens_3d", method:"button"}); return; }
+  const V = activeView(); if (V === AV) clearRegion(); V.atHome = false;
+  const t = V.zoomCenter(f); V.animateTo(t);
+  track("map_zoom", {map: mode === "piste" ? "val_thorens" : "alps", method:"button", zoom:+(V.baseW / t.w).toFixed(1)});
+}
+document.getElementById("z-in").addEventListener("click", () => zoomBtn(0.55));
+document.getElementById("z-out").addEventListener("click", () => zoomBtn(1 / 0.55));
+function enterPiste(source){
+  mode = "piste"; layout.dataset.mode = "piste"; hideTip();
+  selected = VT; selMP = null;
+  RESORTS.forEach(x => x.g.classList.toggle("sel", x === VT));
+  MPOINTS.forEach(m => m.g.classList.remove("sel"));
+  PV.atHome = true;
+  setView(G3 === false ? "2d" : view);
+  if (view === "3d" && G3) G3.home();
+  requestAnimationFrame(() => { PV.atHome = true; PV.lastAspect = PV.aspect(); PV.vb = PV.home(); PV.apply(); });
+  renderPanel(VT);
+  track("piste_map_view", {resort:"val-thorens", source, view});
+  if (window.matchMedia("(max-width: 920px)").matches) mapbox.scrollIntoView({behavior: reduced ? "auto" : "smooth", block:"center"});
+}
+function leavePiste(){
+  mode = "alps"; layout.dataset.mode = "alps"; hideTip();
+  if (G3) G3.stop();
+  requestAnimationFrame(() => { AV.lastAspect = AV.aspect(); AV.apply(); });
+  renderPanel(selected);
+  track("map_zoom", {map:"alps", method:"back_button"});
+}
+document.getElementById("back").addEventListener("click", leavePiste);
+
+function selectMP(m, source){
+  selMP = m;
+  MPOINTS.forEach(x => x.g.classList.toggle("sel", x === m));
+  if (view === "3d" && G3) G3.focusMP(m);
+  PV.atHome = false;
+  if (view === "2d") PV.animateTo(PV.fit(m.x - 70, m.y - 45, m.x + 70, m.y + 45, 1));
+  else PV.vb = PV.fit(m.x - 70, m.y - 45, m.x + 70, m.y + 45, 1);
+  renderMPDetail();
+  track("meeting_point_select", {resort:"val-thorens", point:m.id, source, view});
+}
+
+/* ================= panel ================= */
+const panel = document.getElementById("panel");
+const todayISO = (() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); })();
+const form = {sport:"skiing", ppl:"2", from:"2027-02-15", to:"2027-02-19", vil:0};
+function kmBetween(a, b){
+  const R = 6371, dLat = (b.lat - a.lat)*Math.PI/180, dLon = (b.lon - a.lon)*Math.PI/180;
+  const h = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+}
+function nearest(r, n){ return AIRPORTS.map(a => Object.assign({km:kmBetween(r, a)}, a)).sort((p, q) => p.km - q.km).slice(0, n); }
+function dirUrl(a, r){ return "https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=" + encodeURIComponent(a.full) + "&destination=" + encodeURIComponent(r.name + ", " + COUNTRY[r.cc]); }
+const MEET_SVG = '<svg class="meet" viewBox="0 0 320 172" role="img" aria-label="Illustration: the meeting point sits at the lift base, a short walk from the village centre">'
+ + '<rect width="320" height="172" class="m-sky"/>'
+ + '<path class="m-mtn" d="M0 124 L58 66 L92 90 L150 24 L208 82 L248 52 L320 108 L320 172 L0 172 Z"/>'
+ + '<path class="m-red" d="M150 30 C142 62 126 90 118 124"/><path class="m-blue" d="M154 32 C176 62 190 92 198 126"/><path class="m-green" d="M62 128 C74 120 88 114 100 110"/>'
+ + '<line class="m-lift" x1="134" y1="128" x2="151" y2="30"/><rect class="m-st" x="126" y="126" width="18" height="9" rx="1"/>'
+ + '<g class="m-vil"><rect x="18" y="140" width="16" height="14"/><rect x="38" y="136" width="20" height="18"/><rect x="62" y="142" width="14" height="12"/></g>'
+ + '<text class="m-t" x="18" y="167">Village centre</text><text class="m-t" x="72" y="124">Lift base</text>'
+ + '<circle class="m-pin" cx="150" cy="148" r="6"/><text class="m-t2" x="162" y="152">Meeting point</text></svg>';
+
+function select(r, source){
+  selected = r;
+  RESORTS.forEach(x => x.g.classList.toggle("sel", x === r));
+  form.vil = 0;
+  if (r.hasMap && source !== "default") { track("resort_select", {resort:r.v[0][1], source, instructors:r.count}); enterPiste(source); return; }
+  renderPanel(r);
+  AV.apply();
+  if (source === "list") {
+    const vb = AV.vb, outside = r.x < vb.x || r.x > vb.x + vb.w || r.y < vb.y || r.y > vb.y + vb.h;
+    if (AV.zoom() < 2.2 || outside) { clearRegion(); AV.atHome = false; AV.animateTo(AV.fit(r.x - 70, r.y - 40, r.x + 70, r.y + 40, 1)); }
+  }
+  if (source !== "default") track("resort_select", {resort:r.v[0][1], source, instructors:r.count});
+}
+
+function renderMPDetail(){
+  const box = document.getElementById("mp-detail");
+  if (!box) return;
+  panel.querySelectorAll(".mplist button").forEach(b => b.setAttribute("aria-current", b.dataset.mp === (selMP && selMP.id) ? "true" : "false"));
+  if (!selMP) { box.hidden = true; return; }
+  const m = selMP, [lat, lon] = unitToLatLon(m.x, m.y);
+  box.hidden = false;
+  box.innerHTML = '<span class="badge">Example · set by each instructor</span>'
+    + '<strong></strong>'
+    + '<p class="q"></p>'
+    + '<dl><dt>Best for</dt><dd></dd><dt>Next to</dt><dd></dd><dt>Walk</dt><dd>about ' + m.walkMin + ' min (' + m.walkM + ' m) from the village centre</dd></dl>'
+    + '<a class="lnk" id="mp-gmap" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lon + '">Open this spot in Google Maps ↗</a>';
+  box.querySelector("strong").textContent = m.n + ". " + m.name;
+  box.querySelector(".q").textContent = '"' + m.quote + '"';
+  const dds = box.querySelectorAll("dd"); dds[0].textContent = m.who; dds[1].textContent = m.lift;
+  document.getElementById("mp-gmap").addEventListener("click", () => track("directions_click", {resort:"val-thorens", target:"meeting_point_" + m.id}));
+}
+
+function renderPanel(r){
+  const aps = nearest(r, 2), multi = r.v.length > 1, piste = mode === "piste";
+  const ppl = [1,2,3,4,5,6].map(n => '<option value="' + n + '">' + n + (n === 1 ? " person" : " people") + '</option>').join("");
+  let h = '<div class="p-head">'
+    + '<div class="chips"><span class="chip">' + COUNTRY[r.cc] + '</span>' + (r.area ? '<span class="chip chip-area">' + AREAS[r.area] + '</span>' : '') + '</div>'
+    + '<h2 class="p-name" id="p-name"></h2>'
+    + '<dl class="facts"><div><dt>Village</dt><dd>' + r.alt + '</dd></div>' + (r.st ? '<div><dt>Train</dt><dd id="p-st"></dd></div>' : '') + '</dl>'
+    + '<div class="count"><span class="num">' + r.count + '</span><span class="cl">active instructors' + (multi ? '<br>in the busiest village' : '<br>on Maison Sport') + '</span></div>'
+    + (multi ? '<ul class="villages">' + r.v.map(v => '<li><span>' + v[0] + '</span><span class="vn">' + v[2] + '</span></li>').join("") + '</ul>' : '')
+    + (r.note ? '<p class="note">' + r.note + '</p>' : '')
+    + (BERGFEX[r.id]
+        ? '<a class="offmap" id="offmap" data-provider="bergfex" target="_blank" rel="noopener" href="https://www.bergfex.com/' + BERGFEX[r.id][0] + '/panorama/"><span class="om-t">Official piste map ↗</span><span class="om-s">on bergfex.com · ' + esc(BERGFEX[r.id][1]) + '</span></a>'
+        : '<a class="offmap" id="offmap" data-provider="search" target="_blank" rel="noopener" href="https://www.google.com/search?q=' + encodeURIComponent(r.name + ' official piste map') + '"><span class="om-t">Find the official piste map ↗</span><span class="om-s">web search · not on bergfex yet</span></a>')
+    + '</div>';
+  if (!piste) {
+    h += r.hasMap
+      ? '<div class="mapcta"><button type="button" class="cta" id="open-map">Open the Val Thorens piste map</button><p>Runs, lifts and where your instructor would meet you.</p></div>'
+      : '<div class="mapcta"><p>Piste maps with meeting points are built for Val Thorens in this prototype.</p><button type="button" class="linkbtn" id="open-map">See the Val Thorens example</button></div>';
+  } else {
+    h += '<section class="p-sec"><h3>Meeting points</h3><div class="p-body">'
+      + '<p>Your instructor pins the exact spot when you book. These three are examples at real lift stations.</p>'
+      + '<ul class="mplist">' + MPOINTS.map(m => '<li><button type="button" data-mp="' + m.id + '"><span class="k">' + m.n + '</span><span class="t">' + m.name + '</span><span class="s">' + m.who + ' · ' + m.walkMin + ' min walk</span></button></li>').join("") + '</ul>'
+      + '<div class="mpdetail" id="mp-detail" hidden></div>'
+      + '</div></section>';
+  }
+  h += '<section class="p-sec"><h3>Find an instructor</h3><form class="sf" id="sf" novalidate>'
+    + (multi ? '<label class="full" for="f-vil">Village<select id="f-vil">' + r.v.map((v, i) => '<option value="' + i + '">' + v[0] + ' · ' + v[2] + ' instructors</option>').join("") + '</select></label>' : '')
+    + '<label for="f-sport">Sport<select id="f-sport"><option value="skiing">Ski</option><option value="snowboarding">Snowboard</option></select></label>'
+    + '<label for="f-ppl">People<select id="f-ppl">' + ppl + '</select></label>'
+    + '<label for="f-from">First day<input type="date" id="f-from" min="' + todayISO + '"></label>'
+    + '<label for="f-to">Last day<input type="date" id="f-to" min="' + todayISO + '"></label>'
+    + '<p class="err full" id="f-err" hidden></p>'
+    + '<a class="cta full" id="f-go" target="_blank" rel="noopener"></a>'
+    + '</form></section>'
+    + '<details class="p-sec" id="d-get"><summary>Getting there</summary><div class="p-body">'
+    + '<ul class="aps">' + aps.map(a => '<li><div><strong>' + a.n + ' (' + a.c + ')</strong><span>' + a.km + ' km straight-line</span></div><a class="lnk" data-ap="' + a.c + '" href="' + dirUrl(a, r) + '" target="_blank" rel="noopener">Directions ↗</a></li>').join("") + '</ul>'
+    + (r.st ? '<p>Nearest train station: <strong id="p-st2"></strong></p>' : '')
+    + '<button type="button" class="ghost" id="b-transfer">Get a transfer quote from ' + aps[0].n + '</button>'
+    + '<p class="tnote" id="t-note" hidden>In the live product this opens the transfer partner\'s quote for ' + aps[0].n + ' to ' + r.name + ' on your dates.</p>'
+    + '</div></details>';
+  if (!piste) {
+    h += '<details class="p-sec" id="d-meet"><summary>Meeting point</summary><div class="p-body">'
+      + '<span class="badge">Illustration</span>' + MEET_SVG
+      + '<p>Each instructor pins their own meeting point with a photo and a short note. You see it on the profile before you book, then in your confirmation and in a reminder the evening before.</p>'
+      + '</div></details>';
+  }
+  panel.innerHTML = h;
+  document.getElementById("p-name").textContent = r.name;
+  if (r.st) { document.getElementById("p-st").textContent = r.st.split(" (")[0]; document.getElementById("p-st2").textContent = r.st; }
+
+  const offmap = document.getElementById("offmap");
+  offmap.addEventListener("click", () => track("official_map_click", {resort:r.v[0][1], provider:offmap.dataset.provider, from:piste ? (view === "3d" ? "piste_3d" : "piste_2d") : "alps"}));
+  const openMap = document.getElementById("open-map");
+  if (openMap) openMap.addEventListener("click", () => enterPiste(r.hasMap ? "panel_button" : "example_link"));
+  panel.querySelectorAll(".mplist button").forEach(b => b.addEventListener("click", () => selectMP(MPOINTS.find(m => m.id === b.dataset.mp), "list")));
+  if (piste) renderMPDetail();
+
+  const fSport = document.getElementById("f-sport"), fPpl = document.getElementById("f-ppl"), fFrom = document.getElementById("f-from"), fTo = document.getElementById("f-to"), fVil = document.getElementById("f-vil");
+  const go = document.getElementById("f-go"), err = document.getElementById("f-err");
+  fSport.value = form.sport; fPpl.value = form.ppl; fFrom.value = form.from; fTo.value = form.to;
+  function refresh(){
+    form.sport = fSport.value; form.ppl = fPpl.value; form.from = fFrom.value; form.to = fTo.value;
+    if (fVil) form.vil = +fVil.value;
+    const v = r.v[form.vil] || r.v[0];
+    go.textContent = "See " + v[2] + " instructors on Maison Sport ↗";
+    go.href = "https://maisonsport.com/en/resort/" + v[1] + "/lessons/" + form.sport + "?from=" + form.from + "&to=" + form.to + "&participants=" + form.ppl + "&lessonType=privates";
+    err.hidden = true;
+  }
+  [fSport, fPpl, fFrom, fTo, fVil].forEach(x => x && x.addEventListener("input", refresh));
+  refresh();
+  go.addEventListener("click", e => {
+    let msg = "";
+    if (!form.from || !form.to) msg = "Pick your first and last day of lessons.";
+    else if (form.from < todayISO) msg = "Pick a first day from today onwards.";
+    else if (form.to < form.from) msg = "The last day has to be on or after the first day.";
+    if (msg) { e.preventDefault(); err.textContent = msg; err.hidden = false; return; }
+    const day = 864e5, f = new Date(form.from), t = new Date(form.to), now = new Date(todayISO);
+    track("instructor_search", {resort:(r.v[form.vil] || r.v[0])[1], sport:form.sport, participants:+form.ppl, lesson_days:Math.round((t - f)/day) + 1, lead_days:Math.round((f - now)/day)});
+  });
+  const dGet = document.getElementById("d-get"), dMeet = document.getElementById("d-meet");
+  dGet.addEventListener("toggle", () => { if (dGet.open) track("panel_section_open", {resort:r.v[0][1], section:"getting_there"}); });
+  if (dMeet) dMeet.addEventListener("toggle", () => { if (dMeet.open) track("panel_section_open", {resort:r.v[0][1], section:"meeting_point"}); });
+  panel.querySelectorAll("a[data-ap]").forEach(a => a.addEventListener("click", () => track("directions_click", {resort:r.v[0][1], target:"airport_" + a.dataset.ap})));
+  document.getElementById("b-transfer").addEventListener("click", () => { document.getElementById("t-note").hidden = false; track("transfer_cta_click", {resort:r.v[0][1], airport:aps[0].c}); });
+}
+
+/* ================= start ================= */
+AV.lastAspect = AV.aspect();
+AV.vb = AV.home();
+AV.apply();
+select(VT, "default");
+track("explore_map_view", {page_variant:"explorer_concept_v2"});
+</script>
+
+</body>
+</html>
